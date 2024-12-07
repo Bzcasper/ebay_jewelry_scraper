@@ -18,10 +18,14 @@ RUN pip install -r requirements.txt
 # Install Chrome dependencies
 RUN apt-get update && apt-get install -y wget unzip xvfb libxi6 libgconf-2-4
 
-# Install Google Chrome
-RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add - && \
-    sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list' && \
-    apt-get update && apt-get install -y google-chrome-stable
+# Install required tools and Google Chrome
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget unzip xvfb libxi6 libgconf-2-4 gnupg \
+    && wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor > /usr/share/keyrings/google-chrome-keyring.gpg \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
+    && apt-get update && apt-get install -y google-chrome-stable \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 
 # Clean up APT when done
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
