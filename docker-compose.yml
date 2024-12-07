@@ -1,10 +1,16 @@
 # docker-compose.yml
 
+version: "3.8"
+
 services:
   web:
+    container_name: ebay_jewelry_scraper_web
     build: .
     ports:
       - "5000:5000"
+    volumes:
+      - ./jewelry_dataset:/app/jewelry_dataset
+      - ./logs:/app/logs
     environment:
       - API_KEY=${API_KEY}
       - FLASK_ENV=${FLASK_ENV}
@@ -12,6 +18,4 @@ services:
       - OUTPUT_DIR=${OUTPUT_DIR}
       - MAX_ITEMS_PER_CATEGORY=${MAX_ITEMS_PER_CATEGORY}
       - MAX_PAGES_PER_CATEGORY=${MAX_PAGES_PER_CATEGORY}
-    volumes:
-      - ./jewelry_dataset:/app/jewelry_dataset
     restart: unless-stopped

@@ -276,4 +276,5 @@ if __name__ == '__main__':
         os.makedirs(directory, exist_ok=True)
     
     # Run the Flask app
+    # Removed the invalid HTML comment
     app.run(host='0.0.0.0', port=5000, debug=True)

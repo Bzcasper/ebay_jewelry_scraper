@@ -54,13 +54,14 @@
                 <label>Select Classes and Subcategories:</label>
                 <div id="scrape-classes">
                     {% for category in config.categories %}
+                        {% set outer_index = loop.index %}
                         <div class="scrape-class">
-                            <input type="checkbox" class="main-class" data-main="{{ category.main_class }}" id="main-{{ loop.index }}">
-                            <label for="main-{{ loop.index }}">{{ category.main_class }}</label>
+                            <input type="checkbox" class="main-class" data-main="{{ category.main_class }}" id="main-{{ outer_index }}">
+                            <label for="main-{{ outer_index }}">{{ category.main_class }}</label>
                             <div class="subcategories">
                                 {% for subcat in category.subcategories %}
-                                    <input type="checkbox" class="subcat-checkbox" data-main="{{ category.main_class }}" data-sub="{{ subcat }}" id="sub-{{ loop.parent.index }}-{{ loop.index }}">
-                                    <label for="sub-{{ loop.parent.index }}-{{ loop.index }}">{{ subcat }}</label><br>
+                                    <input type="checkbox" class="subcat-checkbox" data-main="{{ category.main_class }}" data-sub="{{ subcat }}" id="sub-{{ outer_index }}-{{ loop.index }}">
+                                    <label for="sub-{{ outer_index }}-{{ loop.index }}">{{ subcat }}</label><br>
                                 {% endfor %}
                             </div>
                         </div>
