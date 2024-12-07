@@ -1,90 +1,179 @@
-<!-- templates/index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>eBay Jewelry Scraper</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
-    <script src="{{ url_for('static', filename='js/scripts.js') }}" defer></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jewelry Dataset Creator</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
-<body>
-    <div class="container">
-        <h1>eBay Jewelry Scraper</h1>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold mb-8">Jewelry Dataset Creator</h1>
         
-        <!-- Configuration Section -->
-        <div class="config-section">
-            <h2>Configuration</h2>
-            <form id="config-form">
-                <label for="output_dir">Output Directory:</label>
-                <input type="text" id="output_dir" name="output_dir" value="{{ config.output_dir }}" required>
-                
-                <label for="max_items">Max Items per Subcategory:</label>
-                <input type="number" id="max_items" name="max_items" value="{{ config.max_items }}" min="1" required>
-                
-                <label for="max_pages">Max Pages per Subcategory:</label>
-                <input type="number" id="max_pages" name="max_pages" value="{{ config.max_pages }}" min="1" required>
-                
-                <h3>Manage Subcategories</h3>
-                <div id="categories-container">
-                    {% for category in config.categories %}
-                        <div class="category">
-                            <h4>{{ category.main_class }}</h4>
-                            <ul>
-                                {% for subcat in category.subcategories %}
-                                    <li>
-                                        {{ subcat }}
-                                        <button type="button" class="remove-subcat" data-main="{{ category.main_class }}" data-sub="{{ subcat }}">Remove</button>
-                                    </li>
-                                {% endfor %}
-                            </ul>
-                            <input type="text" class="new-subcat" data-main="{{ category.main_class }}" placeholder="Add new subcategory">
-                            <button type="button" class="add-subcat" data-main="{{ category.main_class }}">Add Subcategory</button>
-                        </div>
-                    {% endfor %}
+        <!-- Category Management -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4">Category Management</h2>
+            
+            <!-- Add Category Form -->
+            <div class="mb-6">
+                <h3 class="text-lg font-medium mb-2">Add New Category</h3>
+                <div class="flex gap-4">
+                    <input type="text" id="newCategory" 
+                           class="border rounded px-3 py-2 flex-grow"
+                           placeholder="Enter category name">
+                    <button onclick="addCategory()"
+                            class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                        Add Category
+                    </button>
                 </div>
-                
-                <button type="submit">Update Configuration</button>
-            </form>
-        </div>
-        
-        <!-- Scraping Section -->
-        <div class="scrape-section">
-            <h2>Start Scraping</h2>
-            <form id="scrape-form">
-                <label>Select Classes and Subcategories:</label>
-                <div id="scrape-classes">
-                    {% for category in config.categories %}
-                        {% set outer_index = loop.index %}
-                        <div class="scrape-class">
-                            <input type="checkbox" class="main-class" data-main="{{ category.main_class }}" id="main-{{ outer_index }}">
-                            <label for="main-{{ outer_index }}">{{ category.main_class }}</label>
-                            <div class="subcategories">
-                                {% for subcat in category.subcategories %}
-                                    <input type="checkbox" class="subcat-checkbox" data-main="{{ category.main_class }}" data-sub="{{ subcat }}" id="sub-{{ outer_index }}-{{ loop.index }}">
-                                    <label for="sub-{{ outer_index }}-{{ loop.index }}">{{ subcat }}</label><br>
-                                {% endfor %}
-                            </div>
-                        </div>
-                    {% endfor %}
-                </div>
-                <button type="submit">Start Scraping</button>
-            </form>
-        </div>
-        
-        <!-- Progress Section -->
-        <div class="progress-section">
-            <h2>Scraping Progress</h2>
-            <div id="progress-status">
-                <p>Status: <span id="status">Idle</span></p>
-                <p>Current Class: <span id="current_class">None</span></p>
-                <p>Current Subcategory: <span id="current_subcategory">None</span></p>
-                <p>Items Found: <span id="items_found">0</span></p>
-                <p>Processed Items: <span id="processed_items">0</span></p>
-                <p>Error: <span id="error">None</span></p>
-                <p>Current Task: <span id="current_task">None</span></p>
             </div>
-            <button id="download-button" style="display:none;">Download Dataset</button>
+            
+            <!-- Category List -->
+            <div id="categoryList">
+                {% for main_category, subcategories in categories.items() %}
+                <div class="border rounded-lg p-4 mb-4">
+                    <div class="flex justify-between items-center mb-2">
+                        <h4 class="text-lg font-medium">{{ main_category }}</h4>
+                        <button onclick="removeCategory('{{ main_category }}')"
+                                class="text-red-500 hover:text-red-600">
+                            Remove
+                        </button>
+                    </div>
+                    
+                    <!-- Subcategories -->
+                    <div class="ml-4">
+                        {% for subcategory in subcategories %}
+                        <div class="flex justify-between items-center py-1">
+                            <span>{{ subcategory }}</span>
+                            <button onclick="removeSubcategory('{{ main_category }}', '{{ subcategory }}')"
+                                    class="text-red-500 hover:text-red-600 text-sm">
+                                Remove
+                            </button>
+                        </div>
+                        {% endfor %}
+                        
+                        <!-- Add Subcategory -->
+                        <div class="flex gap-2 mt-2">
+                            <input type="text" 
+                                   class="border rounded px-2 py-1 text-sm flex-grow"
+                                   placeholder="New subcategory"
+                                   id="newSub_{{ main_category }}">
+                            <button onclick="addSubcategory('{{ main_category }}')"
+                                    class="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600">
+                                Add
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <!-- Scraping Controls -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4">Scraping Controls</h2>
+            
+            <!-- Category Selection -->
+            <div class="mb-4">
+                <h3 class="text-lg font-medium mb-2">Select Categories to Scrape</h3>
+                <div id="categorySelection">
+                    {% for main_category, subcategories in categories.items() %}
+                    <div class="mb-2">
+                        <label class="flex items-center">
+                            <input type="checkbox" value="{{ main_category }}"
+                                   class="mr-2 category-checkbox">
+                            {{ main_category }}
+                        </label>
+                        <div class="ml-6">
+                            {% for subcategory in subcategories %}
+                            <label class="flex items-center">
+                                <input type="checkbox" value="{{ subcategory }}"
+                                       data-category="{{ main_category }}"
+                                       class="mr-2 subcategory-checkbox">
+                                {{ subcategory }}
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <!-- Control Buttons -->
+            <div class="flex gap-4">
+                <button onclick="startScraping()"
+                        id="startButton"
+                        class="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600">
+                    Start Scraping
+                </button>
+                <button onclick="downloadDataset('resnet')"
+                        class="bg-green-500 text-white px-6 py-2 rounded hover:bg-green-600">
+                    Download ResNet Dataset
+                </button>
+                <button onclick="downloadDataset('llava')"
+                        class="bg-green-500 text-white px-6 py-2 rounded hover:bg-green-600">
+                    Download LLaVA Dataset
+                </button>
+            </div>
+        </div>
+        
+        <!-- Progress Display -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-xl font-semibold mb-4">Scraping Progress</h2>
+            
+            <div id="progressDisplay">
+                <div class="mb-4">
+                    <div class="flex justify-between mb-1">
+                        <span>Status: <span id="statusText">{{ scraping_state.status }}</span></span>
+                        <span>Items Scraped: <span id="itemCount">{{ scraping_state.items_scraped }}</span></span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5">
+                        <div id="progressBar"
+                             class="bg-blue-600 h-2.5 rounded-full transition-all"
+                             style="width: 0%">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Current Operation -->
+                <div class="mb-4">
+                    <p>Current Category: <span id="currentCategory">-</span></p>
+                    <p>Last Update: <span id="lastUpdate">-</span></p>
+                </div>
+                
+                <!-- Error Display -->
+                <div id="errorDisplay" class="hidden">
+                    <h3 class="text-lg font-medium text-red-600 mb-2">Errors</h3>
+                    <ul id="errorList" class="text-red-500 list-disc list-inside">
+                    </ul>
+                </div>
+                
+                <!-- Stats Display -->
+                <div id="statsDisplay" class="mt-4 hidden">
+                    <h3 class="text-lg font-medium mb-2">Dataset Statistics</h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <!-- ResNet Stats -->
+                        <div class="border rounded p-4">
+                            <h4 class="font-medium mb-2">ResNet-50 Dataset</h4>
+                            <p>Total Images: <span id="resnetTotal">0</span></p>
+                            <p>Training Samples: <span id="resnetTrain">0</span></p>
+                            <p>Validation Samples: <span id="resnetVal">0</span></p>
+                        </div>
+                        
+                        <!-- LLaVA Stats -->
+                        <div class="border rounded p-4">
+                            <h4 class="font-medium mb-2">LLaVA Dataset</h4>
+                            <p>Total Images: <span id="llavaTotal">0</span></p>
+                            <p>Training Samples: <span id="llavaTrain">0</span></p>
+                            <p>Average Caption Length: <span id="llavaAvgLen">0</span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>

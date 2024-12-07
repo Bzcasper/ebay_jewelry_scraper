@@ -1,302 +1,242 @@
 # scraper/core.py
+
 import os
 import json
 import logging
 import time
 import random
 import re
-from urllib.parse import quote
+from urllib.parse import urlencode
 from bs4 import BeautifulSoup
-from selenium.common.exceptions import WebDriverException
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
 from selenium import webdriver
+from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-
-from .selenium_utils import setup_selenium_driver, safe_get_url, check_for_captcha, wait_for_element, scroll_page
-from .data_processors import DatasetProcessor
-from typing import List, Dict, Optional  # Added imports
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 class EbayJewelryScraper:
-    def __init__(self, output_dir: str = "jewelry_dataset", proxies: Optional[List[str]] = None, user_agents: Optional[List[str]] = None):
-        """
-        Initialize the EbayJewelryScraper with optional proxies and user-agents.
-        
-        Args:
-            output_dir (str): Base directory for output data.
-            proxies (Optional[List[str]]): List of proxy URLs.
-            user_agents (Optional[List[str]]): List of user-agent strings.
-        """
+    def __init__(self, output_dir: str = "jewelry_dataset"):
         self.output_dir = output_dir
-        self.processor = DatasetProcessor(base_dir=output_dir)
-        self.proxies = proxies if proxies else []
-        self.user_agents = user_agents if user_agents else []
-        self.proxy_index = 0
-        self.user_agent_index = 0
-        
-    def get_search_url(self, category: str, subcategory: str, page: int = 1) -> str:
-        """
-        Generate search URL with proper filters for a given category and subcategory.
-        
-        Args:
-            category (str): Main category name.
-            subcategory (str): Subcategory name.
-            page (int): Page number for pagination.
-        
-        Returns:
-            str: Constructed search URL.
-        """
-        query = f"{category} {subcategory} jewelry"
-        encoded_query = quote(query)
-        url = (f"https://www.ebay.com/sch/i.html?_nkw={encoded_query}"
-               f"&_pgn={page}&_ipg=48&_dcat=281")  # Adjust _dcat as needed for specific categories
-        return url
-
-    def rotate_proxy_and_user_agent(self, driver):
-        """
-        Rotate proxies and user-agent strings for each session to minimize blocking.
-        
-        Args:
-            driver: Selenium WebDriver instance.
-        """
-        if self.proxies:
-            proxy = self.proxies[self.proxy_index % len(self.proxies)]
-            self.proxy_index += 1
-            # Configure proxy for Selenium WebDriver
-            driver.execute_cdp_cmd('Network.setExtraHTTPHeaders', {'headers': {'Proxy-Authorization': proxy}})
-            logging.info(f"Using proxy: {proxy}")
-        
-        if self.user_agents:
-            user_agent = self.user_agents[self.user_agent_index % len(self.user_agents)]
-            self.user_agent_index += 1
-            # Set user-agent for Selenium WebDriver
-            driver.execute_cdp_cmd('Network.setUserAgentOverride', {"userAgent": user_agent})
-            logging.info(f"Using User-Agent: {user_agent}")
-
-    def extract_price(self, price_text: str) -> Optional[float]:
-        """
-        Extract numerical price from text.
-        
-        Args:
-            price_text (str): Text containing the price.
-        
-        Returns:
-            Optional[float]: Extracted price or None if not found.
-        """
-        if not price_text:
-            return None
-        match = re.search(r'[\d,.]+', price_text)
-        return float(match.group(0).replace(',', '')) if match else None
-    
-    def extract_item_data(self, item: BeautifulSoup) -> Optional[Dict]:
-        """
-        Extract detailed item data from a listing element.
-        
-        Args:
-            item (BeautifulSoup): BeautifulSoup object representing a single listing.
-        
-        Returns:
-            Optional[Dict]: Dictionary containing extracted item data or None if extraction fails.
-        """
-        try:
-            # Selectors for different elements
-            title_elem = item.select_one('[class*="s-item__title"]')
-            price_elem = item.select_one('[class*="s-item__price"], .price')
-            link_elem = item.select_one('a[href*="itm"]')
-            img_elem = item.select_one('img[src*="i.ebayimg.com"]')
-            condition_elem = item.select_one('[class*="s-item__condition"]')
-            subtitle_elem = item.select_one('[class*="s-item__subtitle"]')
-            
-            # Verify required elements
-            if not all([title_elem, price_elem, link_elem, img_elem]):
-                return None
-            
-            # Extract and structure data
-            data = {
-                'title': title_elem.get_text(strip=True),
-                'price': self.extract_price(price_elem.get_text(strip=True)),
-                'url': link_elem['href'],
-                'image_url': img_elem['src'],
-                'condition': condition_elem.get_text(strip=True) if condition_elem else None,
-                'subtitle': subtitle_elem.get_text(strip=True) if subtitle_elem else None,
-            }
-            
-            # Get additional details from product page
-            if data['url']:
-                details = self.get_product_details(data['url'])
-                data.update(details)
-            
-            return data
-            
-        except Exception as e:
-            logging.error(f"Error extracting item data: {e}")
-            return None
-
-    def get_product_details(self, url: str) -> Dict:
-        """
-        Get additional details from the product page.
-        
-        Args:
-            url (str): URL of the product page.
-        
-        Returns:
-            Dict: Dictionary containing additional details like description, specifications, and seller info.
-        """
-        details = {
-            'description': '',
-            'specifications': {},
-            'seller_info': {}
+        self.base_url = "https://www.ebay.com"
+        self.category_mapping = {
+            'necklace': ['Choker', 'Pendant', 'Chain'],
+            'pendant': ['Heart', 'Cross', 'Star'],
+            'bracelet': ['Tennis', 'Charm', 'Bangle'],
+            'ring': ['Engagement', 'Wedding', 'Fashion'],
+            'earring': ['Stud', 'Hoop', 'Drop'],
+            'wristwatch': ['Analog', 'Digital', 'Smart']
         }
-        driver = None
+        
+        # Ensure output directories exist
+        os.makedirs(os.path.join(output_dir, "raw_html"), exist_ok=True)
+        os.makedirs(os.path.join(output_dir, "images"), exist_ok=True)
+        os.makedirs(os.path.join(output_dir, "metadata"), exist_ok=True)
+
+    def generate_search_url(self, category: str, subcategory: str, page: int = 1) -> str:
+        """Generate eBay search URL with filters."""
+        params = {
+            '_nkw': f"{category} {subcategory} jewelry",
+            '_pgn': page,
+            '_ipg': 48,  # Items per page
+            '_sop': 12,  # Sort by Best Match
+            'rt': 'nc',  # No "Buy It Now"
+            'LH_BIN': 1  # Buy It Now only
+        }
+        return f"{self.base_url}/sch/i.html?{urlencode(params)}"
+
+    def extract_price(self, price_elem) -> float:
+        """Extract numerical price from price element."""
+        if not price_elem:
+            return None
+            
         try:
-            driver = setup_selenium_driver()
-            self.rotate_proxy_and_user_agent(driver)
-            driver.get(url)
-            time.sleep(2)  # Wait for page to load
+            # Handle price ranges (take lower price)
+            price_text = price_elem.get_text(strip=True)
+            price_text = price_text.replace('$', '').replace(',', '')
             
-            soup = BeautifulSoup(driver.page_source, 'html.parser')
+            if 'to' in price_text.lower():
+                price_text = price_text.split('to')[0]
             
-            # Get product description
-            desc_elem = soup.select_one('#desc_wrapper')
-            if desc_elem:
-                details['description'] = desc_elem.get_text(separator=' ', strip=True)
-            
-            # Get specifications
-            spec_table = soup.select('div.itemAttr table tr')
-            for row in spec_table:
-                label = row.select_one('td.attrLabel')
-                value = row.select_one('td.attrValue')
-                if label and value:
-                    details['specifications'][label.get_text(strip=True)] = value.get_text(strip=True)
-            
-            # Get seller information
-            seller_elem = soup.select_one('#RightSummaryPanel .mbg .mbg-l a')
-            if seller_elem:
-                details['seller_info']['name'] = seller_elem.get_text(strip=True)
-                details['seller_info']['url'] = seller_elem['href']
-            
-        except WebDriverException as e:
-            logging.error(f"WebDriver exception while getting product details: {e}")
+            # Extract first valid price number
+            matches = re.findall(r'\d+\.?\d*', price_text)
+            if matches:
+                return float(matches[0])
         except Exception as e:
-            logging.error(f"Error getting product details: {e}")
-        finally:
-            if driver:
-                driver.quit()
-        
-        return details
+            logging.error(f"Price extraction error: {e}")
+        return None
 
-    def scrape_page(self, driver: webdriver.Chrome, url: str) -> List[Dict]:
-        """
-        Scrape a single search results page with improved handling.
-        
-        Args:
-            driver (webdriver.Chrome): Selenium WebDriver instance.
-            url (str): URL of the search results page.
-        
-        Returns:
-            List[Dict]: List of extracted item data dictionaries.
-        """
+    def extract_product_data(self, item_elem) -> dict:
+        """Extract all product data from a listing element."""
         try:
-            if not safe_get_url(driver, url):
-                return []
+            # Title with multiple selector fallbacks
+            title_elem = item_elem.select_one('.s-item__title, .lvtitle, h3[class*="title"]')
+            if not title_elem or 'Shop on eBay' in title_elem.text:
+                return None
 
-            # Wait for product grid to load
-            wait_for_element(driver, '[class*="s-item"]', timeout=15)
+            # Price with multiple formats
+            price_elem = item_elem.select_one('.s-item__price, .lvprice, span[class*="price"]')
+            price = self.extract_price(price_elem)
+            if not price:
+                return None
+
+            # Image URL handling both standard and lazy-loaded images
+            img_elem = item_elem.select_one('.s-item__image-img, img[src*="i.ebayimg.com"]')
+            image_url = None
+            if img_elem:
+                image_url = img_elem.get('src') or img_elem.get('data-src')
+                if 'ir.ebaystatic.com' in image_url:  # Skip placeholder images
+                    return None
+
+            # Product URL
+            link_elem = item_elem.select_one('a.s-item__link, .lvtitle a')
+            if not link_elem or not link_elem.get('href'):
+                return None
+
+            # Additional details
+            condition_elem = item_elem.select_one('.s-item__condition, .condText')
+            seller_elem = item_elem.select_one('.s-item__seller-info-text, .sellerInfo')
+            location_elem = item_elem.select_one('.s-item__location, .lvlocation')
+            shipping_elem = item_elem.select_one('.s-item__shipping, .ship')
             
-            # Handle dynamic content
-            scroll_page(driver)
-            time.sleep(2)
-            
-            # Check for CAPTCHA
-            if check_for_captcha(driver):
-                logging.warning("CAPTCHA detected! Waiting for manual resolution...")
-                time.sleep(30)  # Wait time can be adjusted or integrated with CAPTCHA solving services
-            
-            # Save raw HTML for debugging
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            html_path = os.path.join(self.output_dir, "raw_html", f"page_{timestamp}.html")
-            with open(html_path, 'w', encoding='utf-8') as f:
-                f.write(driver.page_source)
-            
-            # Parse updated page content
-            soup = BeautifulSoup(driver.page_source, 'html.parser')
-            listings = soup.select('[class*="s-item"]:not([class*="s-item--placeholder"])')
-            
-            logging.info(f"Found {len(listings)} potential listings on page.")
-            
-            items = []
-            for listing in listings:
-                item_data = self.extract_item_data(listing)
-                if item_data:
-                    items.append(item_data)
-                    
-            logging.info(f"Successfully extracted {len(items)} valid items from page.")
-            return items
+            # Sales data
+            sold_count_elem = item_elem.select_one('.s-item__quantitySold, .hotness-signal')
+            watches_elem = item_elem.select_one('.s-item__watchCount, .watchcount')
+
+            # Build complete product data
+            product_data = {
+                'title': title_elem.get_text(strip=True),
+                'price': price,
+                'image_url': image_url,
+                'url': link_elem['href'],
+                'condition': condition_elem.get_text(strip=True) if condition_elem else None,
+                'seller': seller_elem.get_text(strip=True) if seller_elem else None,
+                'location': location_elem.get_text(strip=True) if location_elem else None,
+                'shipping': shipping_elem.get_text(strip=True) if shipping_elem else None,
+                'sold_count': self._extract_number(sold_count_elem.get_text()) if sold_count_elem else 0,
+                'watch_count': self._extract_number(watches_elem.get_text()) if watches_elem else 0
+            }
+
+            return product_data
 
         except Exception as e:
-            logging.error(f"Error scraping page {url}: {e}")
-            return []
+            logging.error(f"Error extracting product data: {e}")
+            return None
 
-    def scrape_category(self, category: str, subcategory: str, max_items: int = 100, max_pages: int = 5) -> List[Dict]:
-        """
-        Scrape items from a specific category and subcategory with improved error handling.
-        
-        Args:
-            category (str): Main category name.
-            subcategory (str): Subcategory name.
-            max_items (int): Maximum number of items to scrape.
-            max_pages (int): Maximum number of pages to scrape.
-        
-        Returns:
-            List[Dict]: List of scraped item data dictionaries.
-        """
-        logging.info(f"Starting scrape for Category: '{category}' | Subcategory: '{subcategory}'")
-        driver = None
-        all_items = []
-        page = 1
-        
-        try:
-            driver = setup_selenium_driver()
-            self.rotate_proxy_and_user_agent(driver)
-            
-            while len(all_items) < max_items and page <= max_pages:
-                url = self.get_search_url(category, subcategory, page)
-                logging.info(f"Scraping URL: {url}")
-                items = self.scrape_page(driver, url)
+    def _extract_number(self, text: str) -> int:
+        """Extract first number from text string."""
+        if not text:
+            return 0
+        matches = re.findall(r'\d+', text)
+        return int(matches[0]) if matches else 0
+
+    def scrape_listing_page(self, driver, url: str) -> list:
+        """Scrape a single page of product listings."""
+        products = []
+        retry_count = 0
+        max_retries = 3
+
+        while retry_count < max_retries:
+            try:
+                # Load page and wait for products
+                driver.get(url)
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, ".s-item"))
+                )
                 
-                if not items:
-                    logging.warning(f"No items found on page {page}. Ending scrape for this subcategory.")
+                # Scroll to load lazy images
+                self._scroll_page(driver)
+                time.sleep(2)  # Wait for dynamic content
+
+                # Parse page content
+                soup = BeautifulSoup(driver.page_source, 'html.parser')
+                
+                # Find all product listings
+                listings = soup.select('.s-item:not(.s-item--placeholder)')
+                
+                # Extract data from each listing
+                for item in listings:
+                    if product_data := self.extract_product_data(item):
+                        products.append(product_data)
+
+                return products
+
+            except TimeoutException:
+                retry_count += 1
+                logging.warning(f"Timeout on {url}, attempt {retry_count} of {max_retries}")
+                time.sleep(random.uniform(2, 5))
+            except Exception as e:
+                logging.error(f"Error scraping listing page: {e}")
+                return products
+
+        return products
+
+    def _scroll_page(self, driver):
+        """Scroll page to load all content."""
+        last_height = driver.execute_script("return document.body.scrollHeight")
+        
+        while True:
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(1.5)
+            
+            new_height = driver.execute_script("return document.body.scrollHeight")
+            if new_height == last_height:
+                break
+            last_height = new_height
+
+    def scrape_category(self, category: str, subcategory: str, max_pages: int = 5) -> list:
+        """Scrape products from a category/subcategory combination."""
+        all_products = []
+        driver = None
+
+        try:
+            driver = self._setup_driver()
+            
+            for page in range(1, max_pages + 1):
+                url = self.generate_search_url(category, subcategory, page)
+                logging.info(f"Scraping {category}/{subcategory} - Page {page}")
+                
+                products = self.scrape_listing_page(driver, url)
+                if not products:
                     break
                     
-                for item in items:
-                    if len(all_items) >= max_items:
-                        break
-                        
-                    try:
-                        # Process and save image is already handled in process_item
-                        all_items.append(item)
-                        logging.info(f"Processed item {len(all_items)}: {item['title'][:50]}...")
-                        
-                        time.sleep(random.uniform(0.5, 1.5))  # Random delay to mimic human behavior
-                        
-                    except Exception as e:
-                        logging.error(f"Error processing item: {e}")
-                        continue
-
-                page += 1
-                time.sleep(random.uniform(2, 4))  # Random delay between pages
+                all_products.extend(products)
+                
+                # Save progress
+                self._save_results(all_products, category, subcategory)
+                
+                # Random delay between pages
+                time.sleep(random.uniform(2, 5))
 
         except Exception as e:
-            logging.error(f"Error in scrape_category: {e}")
+            logging.error(f"Error scraping category {category}/{subcategory}: {e}")
         finally:
             if driver:
                 driver.quit()
+
+        return all_products
+
+    def _setup_driver(self) -> webdriver.Chrome:
+        """Setup Chrome WebDriver with proper options."""
+        from selenium.webdriver.chrome.options import Options
         
-        if all_items:
-            self.processor.create_dataset(all_items)
-            logging.info(f"Completed scrape for Category: '{category}' | Subcategory: '{subcategory}' | Items Scraped: {len(all_items)}")
-        else:
-            logging.warning(f"No items scraped for Category: '{category}' | Subcategory: '{subcategory}'")
-            
-        return all_items
+        options = Options()
+        options.add_argument('--headless')
+        options.add_argument('--disable-gpu')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--window-size=1920,1080')
+        
+        return webdriver.Chrome(options=options)
+
+    def _save_results(self, products: list, category: str, subcategory: str):
+        """Save scraped products to JSON file."""
+        if not products:
+            return
+
+        filename = f"{category}_{subcategory}_{int(time.time())}.json"
+        filepath = os.path.join(self.output_dir, "metadata", filename)
+
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(products, f, indent=2)
+
+        logging.info(f"Saved {len(products)} products to {filepath}")

@@ -1,227 +1,312 @@
 # scraper/selenium_utils.py
 
-import os  # Ensure 'os' is imported
+import os
+import json
+import time
+import random
+import logging
+from pathlib import Path
+from typing import Dict, List, Optional
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager  # Ensure 'webdriver-manager' is imported
-import logging
-import time
-from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
-from typing import Optional, List
+from selenium.common.exceptions import (
+    TimeoutException, 
+    NoSuchElementException,
+    StaleElementReferenceException,
+    WebDriverException
+)
+from webdriver_manager.chrome import ChromeDriverManager
 
-def setup_selenium_driver(proxies: Optional[List[str]] = None, user_agent: Optional[str] = None) -> webdriver.Chrome:
-    """
-    Configure and initialize Selenium WebDriver with proxy rotation and user-agent spoofing
-
-    Args:
-        proxies (Optional[List[str]]): List of proxy server addresses in the format "http://ip:port".
-        user_agent (Optional[str]): Custom user-agent string to spoof browser identity.
-
-    Returns:
-        webdriver.Chrome: Configured Selenium WebDriver instance.
-
-    Raises:
-        WebDriverException: If the WebDriver fails to initialize.
-    """
-    options = Options()
-    
-    # Headless mode configuration
-    headless = os.getenv('HEADLESS', 'True').lower() in ['true', '1', 't']
-    if headless:
-        options.add_argument('--headless')
-        logging.info("Running Chrome in headless mode.")
-    else:
-        logging.info("Running Chrome in headed mode.")
-    
-    # Essential options
-    options.add_argument('--window-size=1920,1080')
-    options.add_argument('--disable-gpu')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    
-    # Enhanced anti-detection measures
-    options.add_argument('--disable-blink-features=AutomationControlled')
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option('useAutomationExtension', False)
-    
-    # Set user-agent if provided
-    if user_agent:
-        options.add_argument(f'user-agent={user_agent}')
-        logging.info(f"Using custom User-Agent: {user_agent}")
-    
-    # Set proxy if provided
-    if proxies:
-        proxy = proxies[0]  # Use the first proxy in the list
-        options.add_argument(f'--proxy-server={proxy}')
-        logging.info(f"Using proxy server: {proxy}")
-    
-    # Additional privacy options
-    options.add_argument('--disable-notifications')
-    options.add_argument('--disable-popup-blocking')
-    
-    try:
-        # Initialize WebDriver with ChromeDriverManager
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=options)
-        driver.set_page_load_timeout(30)
+class SeleniumManager:
+    def __init__(self, config: Dict, proxy_list: Optional[List[str]] = None):
+        self.config = config
+        self.proxy_list = proxy_list or []
+        self.current_proxy_index = 0
+        self.logger = logging.getLogger(__name__)
         
-        # Execute stealth JavaScript to hide automation flags
-        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        # Setup cookie and user-agent management
+        self.cookies_dir = Path("data/cookies")
+        self.cookies_dir.mkdir(parents=True, exist_ok=True)
+        
+        self.user_agents = [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Firefox/89.0",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Edge/91.0.864.59"
+        ]
+
+    def create_driver(self) -> webdriver.Chrome:
+        """Create and configure Chrome WebDriver instance."""
+        options = self._configure_chrome_options()
+        
+        try:
+            service = Service(ChromeDriverManager().install())
+            driver = webdriver.Chrome(service=service, options=options)
+            
+            # Set page load timeout
+            driver.set_page_load_timeout(self.config['selenium_config']['page_load_timeout'])
+            
+            # Set window size
+            driver.set_window_size(*self.config['selenium_config']['window_size'])
+            
+            # Add stealth settings
+            self._add_stealth_settings(driver)
+            
+            return driver
+            
+        except Exception as e:
+            self.logger.error(f"Failed to create WebDriver: {e}")
+            raise
+
+    def _configure_chrome_options(self) -> Options:
+        """Configure Chrome options for WebDriver."""
+        options = Options()
+        
+        # Headless mode if configured
+        if self.config['selenium_config']['headless']:
+            options.add_argument('--headless')
+        
+        # Add required arguments
+        options.add_argument('--disable-gpu')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--disable-notifications')
+        
+        # Add random user agent
+        options.add_argument(f'user-agent={random.choice(self.user_agents)}')
+        
+        # Add proxy if available
+        if self.proxy_list:
+            proxy = self._get_next_proxy()
+            options.add_argument(f'--proxy-server={proxy}')
+        
+        # Disable automation flags
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option('useAutomationExtension', False)
+        
+        return options
+
+    def _add_stealth_settings(self, driver: webdriver.Chrome):
+        """Add stealth settings to avoid detection."""
         driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
             'source': '''
-                Object.defineProperty(navigator, 'plugins', {
-                    get: () => [1, 2, 3],
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined
                 });
                 Object.defineProperty(navigator, 'languages', {
-                    get: () => ['en-US', 'en'],
+                    get: () => ['en-US', 'en']
+                });
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [1, 2, 3, 4, 5]
                 });
             '''
         })
-        
-        logging.info("Selenium WebDriver initialized successfully.")
-        return driver
-    
-    except WebDriverException as e:
-        logging.error(f"Failed to initialize Selenium WebDriver: {e}")
-        raise
 
-def safe_get_url(driver: webdriver.Chrome, url: str, max_retries: int = 3, wait_time: int = 5) -> bool:
-    """
-    Safely navigate to URL with retries and improved waiting
-
-    Args:
-        driver (webdriver.Chrome): Selenium WebDriver instance.
-        url (str): URL to navigate to.
-        max_retries (int): Maximum number of retry attempts.
-        wait_time (int): Time to wait (in seconds) after each navigation.
-
-    Returns:
-        bool: True if navigation and element loading are successful, False otherwise.
-    """
-    for attempt in range(1, max_retries + 1):
-        try:
-            logging.info(f"Navigating to URL: {url} (Attempt {attempt})")
-            driver.get(url)
+    def _get_next_proxy(self) -> str:
+        """Get next proxy from the list using round-robin."""
+        if not self.proxy_list:
+            return ''
             
-            # Wait for key elements (e.g., product listings) to load
-            WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, ".s-item"))
-            )
-            
-            # Additional wait for dynamic content
-            time.sleep(wait_time)
-            
-            # Scroll the page to load lazy-loaded content
-            scroll_page(driver)
-            
-            logging.info(f"Successfully navigated to {url}")
-            return True
-            
-        except (TimeoutException, WebDriverException) as e:
-            logging.warning(f"Attempt {attempt} failed: {e}")
-            if attempt < max_retries:
-                backoff_time = 2 ** attempt
-                logging.info(f"Retrying in {backoff_time} seconds...")
-                time.sleep(backoff_time)
-            else:
-                logging.error(f"All {max_retries} attempts to navigate to {url} have failed.")
-                return False
+        proxy = self.proxy_list[self.current_proxy_index]
+        self.current_proxy_index = (self.current_proxy_index + 1) % len(self.proxy_list)
+        return proxy
 
-    return False
-
-def check_for_captcha(driver: webdriver.Chrome) -> bool:
-    """
-    Enhanced CAPTCHA detection
-
-    Args:
-        driver (webdriver.Chrome): Selenium WebDriver instance.
-
-    Returns:
-        bool: True if CAPTCHA is detected, False otherwise.
-    """
-    captcha_indicators = [
-        "enter the characters you see below",
-        "security verification",
-        "are you a human",
-        "detected unusual activity",
-        "please verify you're a human",
-        "please confirm you are a human"
-    ]
-    
-    try:
-        # Check for CAPTCHA elements
-        captcha_elements = driver.find_elements(By.CSS_SELECTOR, "[class*='captcha'], [id*='captcha'], [name*='captcha']")
-        if captcha_elements:
-            logging.warning("CAPTCHA element detected on the page.")
-            return True
-        
-        # Check for text indicators in the page source
-        page_source = driver.page_source.lower()
-        for indicator in captcha_indicators:
-            if indicator in page_source:
-                logging.warning(f"CAPTCHA indicator detected: '{indicator}'")
+    def safe_get(self, driver: webdriver.Chrome, url: str, max_retries: int = 3) -> bool:
+        """Safely navigate to URL with retries."""
+        for attempt in range(max_retries):
+            try:
+                driver.get(url)
+                
+                # Wait for page load
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.TAG_NAME, "body"))
+                )
+                
+                # Check for anti-bot measures
+                if self._detect_antibot(driver):
+                    self.logger.warning(f"Anti-bot measures detected on {url}")
+                    self._handle_antibot(driver)
+                
+                # Save cookies
+                self._save_cookies(driver, url)
+                
                 return True
                 
-    except Exception as e:
-        logging.error(f"Error during CAPTCHA detection: {e}")
-    
-    return False
+            except Exception as e:
+                self.logger.warning(f"Attempt {attempt + 1} failed for {url}: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(random.uniform(2, 5))
+                    self._rotate_identity(driver)
+                    
+        return False
 
-def scroll_page(driver: webdriver.Chrome, pause_time: float = 1.0):
-    """
-    Improved page scrolling with dynamic content loading
+    def _detect_antibot(self, driver: webdriver.Chrome) -> bool:
+        """Detect common anti-bot measures."""
+        indicators = [
+            "//div[contains(text(), 'captcha')]",
+            "//div[contains(text(), 'verify')]",
+            "//div[contains(text(), 'robot')]"
+        ]
+        
+        for indicator in indicators:
+            try:
+                if driver.find_elements(By.XPATH, indicator):
+                    return True
+            except:
+                continue
+                
+        return False
 
-    Args:
-        driver (webdriver.Chrome): Selenium WebDriver instance.
-        pause_time (float): Time to wait after each scroll action.
-    """
-    try:
+    def _handle_antibot(self, driver: webdriver.Chrome):
+        """Handle detected anti-bot measures."""
+        # Wait and retry with new identity
+        time.sleep(random.uniform(10, 20))
+        self._rotate_identity(driver)
+
+    def _rotate_identity(self, driver: webdriver.Chrome):
+        """Rotate proxy and user agent."""
+        if self.proxy_list:
+            proxy = self._get_next_proxy()
+            driver.execute_cdp_cmd('Network.setExtraHTTPHeaders', {
+                'headers': {'Proxy-Authorization': proxy}
+            })
+        
+        # Rotate user agent
+        new_user_agent = random.choice(self.user_agents)
+        driver.execute_cdp_cmd('Network.setUserAgentOverride', {
+            "userAgent": new_user_agent
+        })
+
+    def _save_cookies(self, driver: webdriver.Chrome, url: str):
+        """Save cookies for future use."""
+        domain = self._get_domain(url)
+        cookies = driver.get_cookies()
+        
+        if cookies:
+            cookie_file = self.cookies_dir / f"{domain}_cookies.json"
+            with open(cookie_file, 'w') as f:
+                json.dump(cookies, f)
+
+    def _load_cookies(self, driver: webdriver.Chrome, url: str):
+        """Load saved cookies for domain."""
+        domain = self._get_domain(url)
+        cookie_file = self.cookies_dir / f"{domain}_cookies.json"
+        
+        if cookie_file.exists():
+            with open(cookie_file, 'r') as f:
+                cookies = json.load(f)
+                for cookie in cookies:
+                    driver.add_cookie(cookie)
+
+    def _get_domain(self, url: str) -> str:
+        """Extract domain from URL."""
+        from urllib.parse import urlparse
+        return urlparse(url).netloc
+
+    def scroll_page(self, driver: webdriver.Chrome, scroll_pause: float = 1.0):
+        """Scroll page to load all content."""
         last_height = driver.execute_script("return document.body.scrollHeight")
-        logging.info("Starting to scroll the page for dynamic content.")
-    
+        
         while True:
-            # Scroll down to the bottom
+            # Scroll down
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            logging.debug("Scrolled to the bottom of the page.")
-            time.sleep(pause_time)
-    
-            # Calculate new scroll height and compare with last scroll height
+            
+            # Wait for content to load
+            time.sleep(scroll_pause)
+            
+            # Calculate new scroll height
             new_height = driver.execute_script("return document.body.scrollHeight")
+            
             if new_height == last_height:
-                logging.info("Reached the bottom of the page. Scrolling complete.")
                 break
+                
             last_height = new_height
-    
-    except Exception as e:
-        logging.error(f"Error during page scrolling: {e}")
 
-def wait_for_element(driver: webdriver.Chrome, selector: str, by: By = By.CSS_SELECTOR, timeout: int = 10) -> Optional[webdriver.remote.webelement.WebElement]:
-    """
-    Wait for an element to be present and visible
+    def wait_for_element(
+        self,
+        driver: webdriver.Chrome,
+        selector: str,
+        by: str = By.CSS_SELECTOR,
+        timeout: int = 10,
+        condition: str = "presence"
+    ) -> Optional[webdriver.remote.webelement.WebElement]:
+        """Wait for element with specified condition."""
+        try:
+            if condition == "presence":
+                element = WebDriverWait(driver, timeout).until(
+                    EC.presence_of_element_located((by, selector))
+                )
+            elif condition == "clickable":
+                element = WebDriverWait(driver, timeout).until(
+                    EC.element_to_be_clickable((by, selector))
+                )
+            elif condition == "visible":
+                element = WebDriverWait(driver, timeout).until(
+                    EC.visibility_of_element_located((by, selector))
+                )
+            else:
+                raise ValueError(f"Unknown condition: {condition}")
+                
+            return element
+            
+        except TimeoutException:
+            self.logger.warning(f"Timeout waiting for element: {selector}")
+            return None
+        except Exception as e:
+            self.logger.error(f"Error waiting for element {selector}: {e}")
+            return None
 
-    Args:
-        driver (webdriver.Chrome): Selenium WebDriver instance.
-        selector (str): CSS selector of the element to wait for.
-        by (By): Method to locate elements (default is CSS_SELECTOR).
-        timeout (int): Maximum time to wait (in seconds).
+    def safe_click(
+        self,
+        driver: webdriver.Chrome,
+        element: webdriver.remote.webelement.WebElement,
+        max_retries: int = 3
+    ) -> bool:
+        """Safely click element with retries."""
+        for attempt in range(max_retries):
+            try:
+                # Scroll element into view
+                driver.execute_script("arguments[0].scrollIntoView(true);", element)
+                time.sleep(0.5)
+                
+                # Try regular click first
+                element.click()
+                return True
+                
+            except (StaleElementReferenceException, WebDriverException) as e:
+                if attempt == max_retries - 1:
+                    self.logger.error(f"Failed to click element after {max_retries} attempts: {e}")
+                    return False
+                    
+                time.sleep(1)
+                continue
+                
+        return False
 
-    Returns:
-        Optional[WebElement]: The located WebElement if found, None otherwise.
-    """
-    try:
-        element = WebDriverWait(driver, timeout).until(
-            EC.visibility_of_element_located((by, selector))
-        )
-        logging.info(f"Element '{selector}' is present and visible.")
-        return element
-    except TimeoutException:
-        logging.error(f"Timeout waiting for element: '{selector}'")
-    except NoSuchElementException:
-        logging.error(f"Element not found: '{selector}'")
-    except Exception as e:
-        logging.error(f"Unexpected error while waiting for element '{selector}': {e}")
-    return None
+    def check_for_popups(self, driver: webdriver.Chrome):
+        """Check and handle common popups."""
+        popup_selectors = {
+            'cookie_notice': [
+                '//button[contains(text(), "Accept")]',
+                '//button[contains(text(), "Got it")]'
+            ],
+            'newsletter': [
+                '//button[contains(text(), "Close")]',
+                '//div[contains(@class, "popup")]//button'
+            ]
+        }
+        
+        for popup_type, selectors in popup_selectors.items():
+            for selector in selectors:
+                try:
+                    element = driver.find_element(By.XPATH, selector)
+                    if element.is_displayed():
+                        self.safe_click(driver, element)
+                        self.logger.info(f"Handled {popup_type} popup")
+                        time.sleep(0.5)
+                except:
+                    continue
