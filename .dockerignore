@@ -1,28 +1,30 @@
-# .dockerignore
+# Ignore Python cache files
+__pycache__/
+*.py[cod]
 
-__pycache__
-*.pyc
-*.pyo
-*.pyd
-.Python
+# Ignore virtual environments
+venv/
 env/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-*.log
-*.sqlite3
-*.db
-.env
-.git
+ENV/
+
+# Ignore Docker-related files
+Dockerfile
+docker-compose.yml
+
+# Ignore version control directories
+.git/
 .gitignore
+
+# Ignore logs and temporary files
+*.log
+*.tmp
+
+# Ignore datasets and large files (adjust as needed)
+jewelry_dataset/
+*.zip
+
+# Ignore IDE and editor configurations
 .vscode/
 .idea/
-*.md
+*.sublime-project
+*.sublime-workspace

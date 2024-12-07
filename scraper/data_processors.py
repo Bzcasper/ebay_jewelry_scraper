@@ -8,13 +8,13 @@ from io import BytesIO
 import pandas as pd
 from pathlib import Path
 import numpy as np
-from tqdm import tqdm
-import torchvision.transforms as transforms
+from tqdm import tqdm  # Ensure tqdm is installed
+import torchvision.transforms as transforms  # Ensure torchvision is installed
 import zipfile
 import shutil
 import time
 
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional  # Added imports
 from dataclasses import dataclass, field
 
 @dataclass
@@ -100,7 +100,7 @@ class DatasetProcessor:
             transforms.RandomRotation(15),
             transforms.ToTensor(),
         ])
-    
+
     def process_image(self, image_url: str, item_data: Dict, retries: int = 3, timeout: int = 10) -> bool:
         """
         Download and process image for both ResNet50 and LLaVA with augmentation.
@@ -153,7 +153,7 @@ class DatasetProcessor:
         except Exception as e:
             logging.error(f"Unexpected error in process_image: {e}")
             return False
-    
+
     def clean_text(self, text: Optional[str]) -> str:
         """
         Clean and normalize text data.
@@ -170,7 +170,7 @@ class DatasetProcessor:
         # Remove special characters and normalize spacing
         cleaned = ' '.join(text.split())
         return cleaned.strip()
-    
+
     def extract_price(self, price_text: str) -> Optional[float]:
         """
         Extract numerical price from text.
@@ -191,7 +191,7 @@ class DatasetProcessor:
         except ValueError:
             logging.warning(f"Unable to extract price from text: {price_text}")
             return None
-    
+
     def process_item(self, item_data: Dict) -> Optional[Dict]:
         """
         Process a single item's data and images.
@@ -241,7 +241,7 @@ class DatasetProcessor:
         except Exception as e:
             logging.error(f"Error processing item: {e}")
             return None
-    
+
     def create_dataset(self, items: List[Dict]) -> int:
         """
         Create training dataset from processed items.

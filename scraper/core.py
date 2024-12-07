@@ -13,6 +13,7 @@ from selenium.webdriver.common.by import By
 
 from .selenium_utils import setup_selenium_driver, safe_get_url, check_for_captcha, wait_for_element, scroll_page
 from .data_processors import DatasetProcessor
+from typing import List, Dict, Optional  # Added imports
 
 class EbayJewelryScraper:
     def __init__(self, output_dir: str = "jewelry_dataset", proxies: Optional[List[str]] = None, user_agents: Optional[List[str]] = None):
@@ -69,7 +70,7 @@ class EbayJewelryScraper:
             # Set user-agent for Selenium WebDriver
             driver.execute_cdp_cmd('Network.setUserAgentOverride', {"userAgent": user_agent})
             logging.info(f"Using User-Agent: {user_agent}")
-    
+
     def extract_price(self, price_text: str) -> Optional[float]:
         """
         Extract numerical price from text.
@@ -154,14 +155,9 @@ class EbayJewelryScraper:
             soup = BeautifulSoup(driver.page_source, 'html.parser')
             
             # Get product description
-            desc_elem = soup.select_one('#desc_ifr')  # Assuming description is within an iframe
+            desc_elem = soup.select_one('#desc_wrapper')
             if desc_elem:
-                iframe = driver.find_element(By.ID, 'desc_ifr')
-                driver.switch_to.frame(iframe)
-                desc_html = driver.page_source
-                desc_soup = BeautifulSoup(desc_html, 'html.parser')
-                details['description'] = desc_soup.get_text(separator=' ', strip=True)
-                driver.switch_to.default_content()
+                details['description'] = desc_elem.get_text(separator=' ', strip=True)
             
             # Get specifications
             spec_table = soup.select('div.itemAttr table tr')
@@ -187,12 +183,12 @@ class EbayJewelryScraper:
         
         return details
 
-    def scrape_page(self, driver, url: str) -> List[Dict]:
+    def scrape_page(self, driver: webdriver.Chrome, url: str) -> List[Dict]:
         """
         Scrape a single search results page with improved handling.
         
         Args:
-            driver: Selenium WebDriver instance.
+            driver (webdriver.Chrome): Selenium WebDriver instance.
             url (str): URL of the search results page.
         
         Returns:
