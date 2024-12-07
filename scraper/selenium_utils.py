@@ -1,3 +1,4 @@
+# scraper/selenium_utils.py
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -7,13 +8,14 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 import logging
 import time
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
-def setup_selenium_driver():
-    """Configure and initialize Selenium WebDriver with improved settings"""
+def setup_selenium_driver(proxies=None, user_agent=None):
+    """Configure and initialize Selenium WebDriver with proxy rotation and user-agent spoofing"""
     options = Options()
     
-    # Comment out headless mode for debugging
-    # options.add_argument('--headless')
+    # Uncomment the following line to run Chrome in headless mode
+    options.add_argument('--headless')
     
     # Essential options
     options.add_argument('--window-size=1920,1080')
@@ -26,11 +28,15 @@ def setup_selenium_driver():
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option('useAutomationExtension', False)
     
-    # Set realistic user agent
-    user_agent = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                 'AppleWebKit/537.36 (KHTML, like Gecko) '
-                 'Chrome/120.0.0.0 Safari/537.36')
-    options.add_argument(f'user-agent={user_agent}')
+    # Set user-agent if provided
+    if user_agent:
+        options.add_argument(f'user-agent={user_agent}')
+    
+    # Set proxy if provided
+    if proxies:
+        proxy = proxies
+        options.add_argument(f'--proxy-server={proxy}')
+        logging.info(f"Using proxy server: {proxy}")
     
     # Additional privacy options
     options.add_argument('--disable-notifications')
@@ -41,17 +47,13 @@ def setup_selenium_driver():
         driver = webdriver.Chrome(service=service, options=options)
         driver.set_page_load_timeout(30)
         
-        # Set initial cookies and perform setup
-        driver.get("https://www.ebay.com")
-        time.sleep(3)  # Increased initial wait time
-        
         # Execute stealth JavaScript
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         
         return driver
         
     except Exception as e:
-        logging.error(f"Failed to initialize Selenium: {str(e)}")
+        logging.error(f"Failed to initialize Selenium: {e}")
         raise
 
 def safe_get_url(driver, url, max_retries=3):
@@ -74,7 +76,7 @@ def safe_get_url(driver, url, max_retries=3):
             return True
             
         except Exception as e:
-            logging.error(f"Error navigating to {url} (attempt {attempt + 1}): {str(e)}")
+            logging.error(f"Error navigating to {url} (attempt {attempt + 1}): {e}")
             if attempt < max_retries - 1:
                 time.sleep(2 * (attempt + 1))
                 continue
@@ -83,14 +85,12 @@ def safe_get_url(driver, url, max_retries=3):
 def check_for_captcha(driver):
     """Enhanced CAPTCHA detection"""
     captcha_indicators = [
-        "/.*/distil_identify_cookie.html.*",
-        "/.*/distil_r_captcha.html.*",
-        "Enter the characters you see below",
-        "Security Verification",
-        "Are you a human?",
+        "enter the characters you see below",
+        "security verification",
+        "are you a human",
         "detected unusual activity",
         "please verify you're a human",
-        "Please confirm you are a human"
+        "please confirm you are a human"
     ]
     
     # Check both URL and page source
@@ -107,7 +107,7 @@ def check_for_captcha(driver):
         pass
     
     for indicator in captcha_indicators:
-        if indicator.lower() in page_source or indicator.lower() in current_url:
+        if indicator in page_source or indicator in current_url:
             return True
             
     return False
@@ -139,7 +139,7 @@ def scroll_page(driver, pause_time=1):
         time.sleep(pause_time)
         
     except Exception as e:
-        logging.error(f"Error scrolling page: {str(e)}")
+        logging.error(f"Error scrolling page: {e}")
 
 def wait_for_element(driver, selector, by=By.CSS_SELECTOR, timeout=10):
     """Wait for an element to be present and visible"""
@@ -148,6 +148,12 @@ def wait_for_element(driver, selector, by=By.CSS_SELECTOR, timeout=10):
             EC.presence_of_element_located((by, selector))
         )
         return element
+    except TimeoutException:
+        logging.error(f"Timeout waiting for element {selector}")
+        return None
+    except NoSuchElementException:
+        logging.error(f"Element not found: {selector}")
+        return None
     except Exception as e:
-        logging.error(f"Timeout waiting for element {selector}: {str(e)}")
+        logging.error(f"Unexpected error while waiting for element {selector}: {e}")
         return None

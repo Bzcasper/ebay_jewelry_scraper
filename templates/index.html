@@ -1,93 +1,86 @@
-# templates/index.html
+<!-- templates/index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>eBay Jewelry Scraper</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script src="{{ url_for('static', filename='js/scripts.js') }}" defer></script>
 </head>
-<body class="bg-gray-100 min-h-screen p-8">
-    <div class="max-w-3xl mx-auto">
-        <h1 class="text-3xl font-bold mb-8">eBay Jewelry Scraper</h1>
+<body>
+    <div class="container">
+        <h1>eBay Jewelry Scraper</h1>
         
-        <div class="bg-white rounded-lg shadow p-6 mb-8">
-            <h2 class="text-xl font-semibold mb-4">Start Scraping</h2>
-            
-            <div class="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                    <label class="block text-sm font-medium mb-2">Category</label>
-                    <select id="category" class="w-full border rounded p-2">
-                        <option value="Rings">Rings</option>
-                        <option value="Necklaces">Necklaces</option>
-                        <option value="Bracelets">Bracelets</option>
-                    </select>
+        <div class="config-section">
+            <h2>Configuration</h2>
+            <form id="config-form">
+                <label for="output_dir">Output Directory:</label>
+                <input type="text" id="output_dir" name="output_dir" value="{{ config.output_dir }}" required>
+                
+                <label for="max_items">Max Items per Subcategory:</label>
+                <input type="number" id="max_items" name="max_items" value="{{ config.max_items }}" min="1" required>
+                
+                <label for="max_pages">Max Pages per Subcategory:</label>
+                <input type="number" id="max_pages" name="max_pages" value="{{ config.max_pages }}" min="1" required>
+                
+                <h3>Manage Subcategories</h3>
+                <div id="categories-container">
+                    {% for category in config.categories %}
+                        <div class="category">
+                            <h4>{{ category.main_class }}</h4>
+                            <ul>
+                                {% for subcat in category.subcategories %}
+                                    <li>
+                                        {{ subcat }}
+                                        <button type="button" class="remove-subcat" data-main="{{ category.main_class }}" data-sub="{{ subcat }}">Remove</button>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                            <input type="text" class="new-subcat" data-main="{{ category.main_class }}" placeholder="Add new subcategory">
+                            <button type="button" class="add-subcat" data-main="{{ category.main_class }}">Add Subcategory</button>
+                        </div>
+                    {% endfor %}
                 </div>
                 
-                <div>
-                    <label class="block text-sm font-medium mb-2">Subcategory</label>
-                    <select id="subcategory" class="w-full border rounded p-2">
-                        <option value="Engagement">Engagement</option>
-                        <option value="Fashion">Fashion</option>
-                        <option value="Wedding">Wedding</option>
-                    </select>
-                </div>
-            </div>
-            
-            <button onclick="startScraping()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
-                Start Scraping
-            </button>
+                <button type="submit">Update Configuration</button>
+            </form>
         </div>
         
-        <div id="progress" class="bg-white rounded-lg shadow p-6 hidden">
-            <h2 class="text-xl font-semibold mb-4">Progress</h2>
-            <div class="space-y-2">
-                <p>Status: <span id="status" class="font-medium">-</span></p>
-                <p>Current Category: <span id="currentCategory" class="font-medium">-</span></p>
-                <p>Items Found: <span id="itemsFound" class="font-medium">0</span></p>
-                <p id="errorMessage" class="text-red-500 hidden"></p>
+        <div class="scrape-section">
+            <h2>Start Scraping</h2>
+            <form id="scrape-form">
+                <label>Select Classes and Subcategories:</label>
+                <div id="scrape-classes">
+                    {% for category in config.categories %}
+                        <div class="scrape-class">
+                            <input type="checkbox" class="main-class" data-main="{{ category.main_class }}" id="main-{{ loop.index }}">
+                            <label for="main-{{ loop.index }}">{{ category.main_class }}</label>
+                            <div class="subcategories">
+                                {% for subcat in category.subcategories %}
+                                    <input type="checkbox" class="subcat-checkbox" data-main="{{ category.main_class }}" data-sub="{{ subcat }}" id="sub-{{ loop.parent.loop.index }}-{{ loop.index }}">
+                                    <label for="sub-{{ loop.parent.loop.index }}-{{ loop.index }}">{{ subcat }}</label><br>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+                <button type="submit">Start Scraping</button>
+            </form>
+        </div>
+        
+        <div class="progress-section">
+            <h2>Scraping Progress</h2>
+            <div id="progress-status">
+                <p>Status: <span id="status">Idle</span></p>
+                <p>Current Class: <span id="current_class">None</span></p>
+                <p>Current Subcategory: <span id="current_subcategory">None</span></p>
+                <p>Items Found: <span id="items_found">0</span></p>
+                <p>Processed Items: <span id="processed_items">0</span></p>
+                <p>Error: <span id="error">None</span></p>
+                <p>Current Task: <span id="current_task">None</span></p>
             </div>
+            <button id="download-button" style="display:none;">Download Dataset</button>
         </div>
     </div>
-
-    <script>
-        function startScraping() {
-            const category = document.getElementById('category').value;
-            const subcategory = document.getElementById('subcategory').value;
-            
-            document.getElementById('progress').classList.remove('hidden');
-            
-            fetch('/start_scraping', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ category, subcategory })
-            });
-            
-            // Start progress polling
-            pollProgress();
-        }
-        
-        function pollProgress() {
-            setInterval(() => {
-                fetch('/progress')
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('status').textContent = data.status;
-                    document.getElementById('currentCategory').textContent = data.current_category || '-';
-                    document.getElementById('itemsFound').textContent = data.items_found;
-                    
-                    const errorElem = document.getElementById('errorMessage');
-                    if (data.error) {
-                        errorElem.textContent = `Error: ${data.error}`;
-                        errorElem.classList.remove('hidden');
-                    } else {
-                        errorElem.classList.add('hidden');
-                    }
-                });
-            }, 1000);
-        }
-    </script>
 </body>
 </html>

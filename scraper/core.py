@@ -4,27 +4,22 @@ import json
 import logging
 import time
 import random
+import re
 from urllib.parse import quote
 from bs4 import BeautifulSoup
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 from .selenium_utils import setup_selenium_driver, safe_get_url, check_for_captcha, wait_for_element, scroll_page
-from .data_processors import process_image, save_metadata
+from .data_processors import DatasetProcessor
+from selenium.common.exceptions import WebDriverException
 
 class EbayJewelryScraper:
-    def __init__(self, output_dir="jewelry_dataset"):
+    def __init__(self, output_dir="jewelry_dataset", proxies=None, user_agents=None):
         self.output_dir = output_dir
-        self.image_dir = os.path.join(output_dir, "images")
-        self.metadata_dir = os.path.join(output_dir, "metadata")
-        self.raw_html_dir = os.path.join(output_dir, "raw_html")
+        self.processor = DatasetProcessor(base_dir=output_dir)
+        self.proxies = proxies if proxies else []
+        self.user_agents = user_agents if user_agents else []
+        self.proxy_index = 0
+        self.user_agent_index = 0
         
-        # Create necessary directories
-        for directory in [self.image_dir, self.metadata_dir, self.raw_html_dir]:
-            os.makedirs(directory, exist_ok=True)
-            
-        logging.info(f"Initialized scraper with output directory: {output_dir}")
-
     def get_search_url(self, category, subcategory, page=1):
         """Generate search URL with proper filters"""
         query = f"{category} {subcategory} jewelry"
@@ -33,57 +28,108 @@ class EbayJewelryScraper:
                f"&_pgn={page}&_ipg=48&_dcat=281")
         return url
 
+    def rotate_proxy_and_user_agent(self, driver):
+        """Rotate proxies and user-agent strings for each session"""
+        if self.proxies:
+            proxy = self.proxies[self.proxy_index % len(self.proxies)]
+            self.proxy_index += 1
+            driver.execute_cdp_cmd('Network.setExtraHTTPHeaders', {'headers': {'Proxy-Authorization': proxy}})
+            logging.info(f"Using proxy: {proxy}")
+        
+        if self.user_agents:
+            user_agent = self.user_agents[self.user_agent_index % len(self.user_agents)]
+            self.user_agent_index += 1
+            driver.execute_cdp_cmd('Network.setUserAgentOverride', {"userAgent": user_agent})
+            logging.info(f"Using User-Agent: {user_agent}")
+    
+    def extract_price(self, price_text):
+        """Extract numerical price from text"""
+        if not price_text:
+            return None
+        match = re.search(r'[\d,.]+', price_text)
+        return float(match.group(0).replace(',', '')) if match else None
+    
     def extract_item_data(self, item):
-        """Extract data from a single listing with improved selectors"""
+        """Extract detailed item data from listing"""
         try:
-            # Updated selectors to match current eBay structure
+            # Updated selectors for detailed data
             title_elem = item.select_one('[class*="s-item__title"]')
             price_elem = item.select_one('[class*="s-item__price"], .price')
             link_elem = item.select_one('a[href*="itm"]')
             img_elem = item.select_one('img[src*="i.ebayimg.com"]')
+            condition_elem = item.select_one('[class*="s-item__condition"]')
+            subtitle_elem = item.select_one('[class*="s-item__subtitle"]')
             
-            # Debug logging
-            logging.debug(f"Raw title element: {title_elem}")
-            logging.debug(f"Raw price element: {price_elem}")
-            logging.debug(f"Raw link element: {link_elem}")
-            logging.debug(f"Raw image element: {img_elem}")
+            # Verify required elements
+            if not all([title_elem, price_elem, link_elem, img_elem]):
+                return None
             
-            # Extract and clean data
+            # Extract and structure data
             data = {
-                'title': title_elem.get_text(strip=True) if title_elem else None,
-                'price': price_elem.get_text(strip=True).replace('US $', '').strip() if price_elem else None,
-                'url': link_elem['href'] if link_elem and 'href' in link_elem.attrs else None,
-                'image_url': img_elem['src'] if img_elem and 'src' in img_elem.attrs else None
+                'title': title_elem.get_text(strip=True),
+                'price': self.extract_price(price_elem.get_text(strip=True)),
+                'url': link_elem['href'],
+                'image_url': img_elem['src'],
+                'condition': condition_elem.get_text(strip=True) if condition_elem else None,
+                'subtitle': subtitle_elem.get_text(strip=True) if subtitle_elem else None,
             }
             
-            # Additional metadata
-            condition_elem = item.select_one('[class*="condition"]')
-            shipping_elem = item.select_one('[class*="shipping"]')
-            seller_elem = item.select_one('[class*="seller"]')
-            location_elem = item.select_one('[class*="location"]')
+            # Get additional details from product page
+            if data['url']:
+                details = self.get_product_details(data['url'])
+                data.update(details)
             
-            if condition_elem:
-                data['condition'] = condition_elem.get_text(strip=True)
-            if shipping_elem:
-                data['shipping'] = shipping_elem.get_text(strip=True)
-            if seller_elem:
-                data['seller'] = seller_elem.get_text(strip=True)
-            if location_elem:
-                data['location'] = location_elem.get_text(strip=True)
-                
-            # Validate required fields
-            required_fields = ['title', 'price', 'url', 'image_url']
-            missing_fields = [field for field in required_fields if not data[field]]
-            
-            if missing_fields:
-                logging.debug(f"Missing required fields: {missing_fields}")
-                return None
-                
             return data
-                
+            
         except Exception as e:
-            logging.error(f"Error extracting item data: {str(e)}")
+            logging.error(f"Error extracting item data: {e}")
             return None
+
+    def get_product_details(self, url):
+        """Get additional details from product page"""
+        try:
+            driver = setup_selenium_driver()
+            self.rotate_proxy_and_user_agent(driver)
+            driver.get(url)
+            time.sleep(2)
+            
+            soup = BeautifulSoup(driver.page_source, 'html.parser')
+            
+            details = {
+                'description': '',
+                'specifications': {},
+                'seller_info': {}
+            }
+            
+            # Get product description
+            desc_elem = soup.select_one('#desc_wrapper')
+            if desc_elem:
+                details['description'] = desc_elem.get_text(separator=' ', strip=True)
+            
+            # Get specifications
+            spec_table = soup.select('div.itemAttr table tr')
+            for row in spec_table:
+                label = row.select_one('td.attrLabel')
+                value = row.select_one('td.attrValue')
+                if label and value:
+                    details['specifications'][label.get_text(strip=True)] = value.get_text(strip=True)
+            
+            # Get seller information
+            seller_elem = soup.select_one('#RightSummaryPanel .mbg .mbg-l a')
+            if seller_elem:
+                details['seller_info']['name'] = seller_elem.get_text(strip=True)
+            
+            return details
+            
+        except WebDriverException as e:
+            logging.error(f"WebDriver exception while getting product details: {e}")
+            return {}
+        except Exception as e:
+            logging.error(f"Error getting product details: {e}")
+            return {}
+        finally:
+            if driver:
+                driver.quit()
 
     def scrape_page(self, driver, url):
         """Scrape a single search results page with improved handling"""
@@ -100,12 +146,12 @@ class EbayJewelryScraper:
             
             # Check for CAPTCHA
             if check_for_captcha(driver):
-                logging.warning("CAPTCHA detected!")
-                time.sleep(30)  # Wait for manual solving
-                
+                logging.warning("CAPTCHA detected! Waiting for manual resolution...")
+                time.sleep(30)  # Wait time can be adjusted or integrated with CAPTCHA solving services
+            
             # Save raw HTML for debugging
             timestamp = time.strftime("%Y%m%d_%H%M%S")
-            html_path = os.path.join(self.raw_html_dir, f"page_{timestamp}.html")
+            html_path = os.path.join(self.output_dir, "raw_html", f"page_{timestamp}.html")
             with open(html_path, 'w', encoding='utf-8') as f:
                 f.write(driver.page_source)
             
@@ -125,10 +171,10 @@ class EbayJewelryScraper:
             return items
 
         except Exception as e:
-            logging.error(f"Error scraping page {url}: {str(e)}")
+            logging.error(f"Error scraping page {url}: {e}")
             return []
 
-    def scrape_category(self, category, subcategory, max_items=10, max_pages=5):
+    def scrape_category(self, category, subcategory, max_items=100, max_pages=5):
         """Scrape items from a specific category with improved error handling"""
         logging.info(f"Starting scrape for {category} - {subcategory}")
         driver = None
@@ -137,9 +183,11 @@ class EbayJewelryScraper:
         
         try:
             driver = setup_selenium_driver()
+            self.rotate_proxy_and_user_agent(driver)
             
             while len(all_items) < max_items and page <= max_pages:
                 url = self.get_search_url(category, subcategory, page)
+                logging.info(f"Scraping URL: {url}")
                 items = self.scrape_page(driver, url)
                 
                 if not items:
@@ -153,9 +201,9 @@ class EbayJewelryScraper:
                     try:
                         # Process and save image
                         image_filename = f"{category}_{subcategory}_{len(all_items):04d}.jpg"
-                        image_path = os.path.join(self.image_dir, image_filename)
+                        image_path = os.path.join(self.processor.images_dir, image_filename)
                         
-                        if process_image(item['image_url'], image_path):
+                        if self.processor.process_image(item['image_url'], item):
                             item['image_path'] = image_path
                             item['category'] = category
                             item['subcategory'] = subcategory
@@ -165,19 +213,19 @@ class EbayJewelryScraper:
                         time.sleep(random.uniform(0.5, 1.5))
                         
                     except Exception as e:
-                        logging.error(f"Error processing item: {str(e)}")
+                        logging.error(f"Error processing item: {e}")
                         continue
 
                 page += 1
                 time.sleep(random.uniform(2, 4))
 
         except Exception as e:
-            logging.error(f"Error in scrape_category: {str(e)}")
+            logging.error(f"Error in scrape_category: {e}")
         finally:
             if driver:
                 driver.quit()
             if all_items:
-                save_metadata(all_items, self.metadata_dir, f"{category}_{subcategory}")
+                self.processor.create_dataset(all_items)
 
         if not all_items:
             logging.warning(f"No items found for {category} - {subcategory}")

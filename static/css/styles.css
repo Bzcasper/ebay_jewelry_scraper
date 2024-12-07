@@ -1,0 +1,120 @@
+/* static/css/styles.css */
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f4;
+    margin: 0;
+    padding: 0;
+}
+
+.container {
+    width: 90%;
+    max-width: 1200px;
+    margin: auto;
+    overflow: hidden;
+    padding: 20px;
+    background-color: #fff;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+h1, h2, h3, h4 {
+    color: #333;
+}
+
+form {
+    margin-bottom: 30px;
+}
+
+label {
+    display: block;
+    margin-top: 10px;
+    font-weight: bold;
+}
+
+input[type="text"],
+input[type="number"] {
+    width: 100%;
+    padding: 8px;
+    margin-top: 5px;
+    box-sizing: border-box;
+}
+
+button {
+    margin-top: 10px;
+    padding: 10px 15px;
+    background-color: #5cb85c;
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+button:hover {
+    background-color: #4cae4c;
+}
+
+.category, .scrape-class {
+    border: 1px solid #ccc;
+    padding: 10px;
+    margin-top: 10px;
+    border-radius: 4px;
+    background-color: #fafafa;
+}
+
+.remove-subcat {
+    background-color: #d9534f;
+    margin-left: 10px;
+    padding: 5px 10px;
+    border: none;
+    border-radius: 4px;
+}
+
+.remove-subcat:hover {
+    background-color: #c9302c;
+}
+
+.subcategories {
+    margin-left: 20px;
+}
+
+#download-button {
+    background-color: #0275d8;
+    border-radius: 4px;
+}
+
+#download-button:hover {
+    background-color: #025aa5;
+}
+
+button.add-subcat {
+    background-color: #5bc0de;
+}
+
+button.add-subcat:hover {
+    background-color: #31b0d5;
+}
+
+button[type="submit"] {
+    width: 100%;
+    background-color: #5cb85c;
+}
+
+button[type="submit"]:hover {
+    background-color: #4cae4c;
+}
+
+.progress-section {
+    border: 1px solid #ccc;
+    padding: 10px;
+    border-radius: 4px;
+    background-color: #fafafa;
+}
+
+#progress-status p {
+    margin: 5px 0;
+}
+
+@media (max-width: 768px) {
+    .container {
+        width: 95%;
+    }
+}
