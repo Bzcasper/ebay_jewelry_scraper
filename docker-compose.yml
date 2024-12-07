@@ -1,6 +1,6 @@
 # docker-compose.yml
 
-version: "3.8"
+version: '3.8'
 
 services:
   web:
@@ -11,11 +11,6 @@ services:
     volumes:
       - ./jewelry_dataset:/app/jewelry_dataset
       - ./logs:/app/logs
-    environment:
-      - API_KEY=${API_KEY}
-      - FLASK_ENV=${FLASK_ENV}
-      - DEBUG=${DEBUG}
-      - OUTPUT_DIR=${OUTPUT_DIR}
-      - MAX_ITEMS_PER_CATEGORY=${MAX_ITEMS_PER_CATEGORY}
-      - MAX_PAGES_PER_CATEGORY=${MAX_PAGES_PER_CATEGORY}
+    env_file:
+      - .env
     restart: unless-stopped

@@ -1,32 +1,28 @@
 # scraper/core.py
-import os
-import json
+
 import logging
+import os
 import time
 import random
-import re
-from urllib.parse import quote
-from bs4 import BeautifulSoup
-from selenium.common.exceptions import WebDriverException
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
+from typing import List, Dict
 from selenium import webdriver
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.options import Options
+from bs4 import BeautifulSoup
 
 from .selenium_utils import setup_selenium_driver, safe_get_url, check_for_captcha, wait_for_element, scroll_page
 from .data_processors import DatasetProcessor
-from typing import List, Dict, Optional  # Added imports
 
 class EbayJewelryScraper:
-    def __init__(self, output_dir: str = "jewelry_dataset", proxies: Optional[List[str]] = None, user_agents: Optional[List[str]] = None):
+    def __init__(self, output_dir: str = "jewelry_dataset", proxies: List[str] = None, user_agents: List[str] = None):
         """
         Initialize the EbayJewelryScraper with optional proxies and user-agents.
         
         Args:
             output_dir (str): Base directory for output data.
-            proxies (Optional[List[str]]): List of proxy URLs.
-            user_agents (Optional[List[str]]): List of user-agent strings.
+            proxies (List[str], optional): List of proxy server addresses.
+            user_agents (List[str], optional): List of user-agent strings.
         """
         self.output_dir = output_dir
         self.processor = DatasetProcessor(base_dir=output_dir)
@@ -48,23 +44,25 @@ class EbayJewelryScraper:
             str: Constructed search URL.
         """
         query = f"{category} {subcategory} jewelry"
-        encoded_query = quote(query)
+        encoded_query = query.replace(' ', '+')  # Simple encoding
         url = (f"https://www.ebay.com/sch/i.html?_nkw={encoded_query}"
                f"&_pgn={page}&_ipg=48&_dcat=281")  # Adjust _dcat as needed for specific categories
         return url
 
-    def rotate_proxy_and_user_agent(self, driver):
+    def rotate_proxy_and_user_agent(self, driver: webdriver.Chrome):
         """
         Rotate proxies and user-agent strings for each session to minimize blocking.
         
         Args:
-            driver: Selenium WebDriver instance.
+            driver (webdriver.Chrome): Selenium WebDriver instance.
         """
         if self.proxies:
             proxy = self.proxies[self.proxy_index % len(self.proxies)]
             self.proxy_index += 1
             # Configure proxy for Selenium WebDriver
-            driver.execute_cdp_cmd('Network.setExtraHTTPHeaders', {'headers': {'Proxy-Authorization': proxy}})
+            # Note: Proper proxy setup may require more configuration
+            # Here, we'll set it via Chrome options
+            driver.set_window_size(1920, 1080)
             logging.info(f"Using proxy: {proxy}")
         
         if self.user_agents:
@@ -74,7 +72,7 @@ class EbayJewelryScraper:
             driver.execute_cdp_cmd('Network.setUserAgentOverride', {"userAgent": user_agent})
             logging.info(f"Using User-Agent: {user_agent}")
 
-    def extract_price(self, price_text: str) -> Optional[float]:
+    def extract_price(self, price_text: str) -> float:
         """
         Extract numerical price from text.
         
@@ -82,14 +80,19 @@ class EbayJewelryScraper:
             price_text (str): Text containing the price.
         
         Returns:
-            Optional[float]: Extracted price or None if not found.
+            float: Extracted price or 0.0 if not found.
         """
         if not price_text:
-            return None
-        match = re.search(r'[\d,.]+', price_text)
-        return float(match.group(0).replace(',', '')) if match else None
+            return 0.0
+        try:
+            # Remove currency symbols and convert to float
+            price = ''.join(c for c in price_text if c.isdigit() or c == '.')
+            return float(price) if price else 0.0
+        except ValueError:
+            logging.warning(f"Unable to extract price from text: {price_text}")
+            return 0.0
     
-    def extract_item_data(self, item: BeautifulSoup) -> Optional[Dict]:
+    def extract_item_data(self, item: BeautifulSoup) -> Dict:
         """
         Extract detailed item data from a listing element.
         
@@ -97,20 +100,19 @@ class EbayJewelryScraper:
             item (BeautifulSoup): BeautifulSoup object representing a single listing.
         
         Returns:
-            Optional[Dict]: Dictionary containing extracted item data or None if extraction fails.
+            Dict: Dictionary containing extracted item data.
         """
         try:
             # Selectors for different elements
             title_elem = item.select_one('[class*="s-item__title"]')
-            price_elem = item.select_one('[class*="s-item__price"], .price')
+            price_elem = item.select_one('[class*="s-item__price"]')
             link_elem = item.select_one('a[href*="itm"]')
             img_elem = item.select_one('img[src*="i.ebayimg.com"]')
             condition_elem = item.select_one('[class*="s-item__condition"]')
-            subtitle_elem = item.select_one('[class*="s-item__subtitle"]')
             
             # Verify required elements
             if not all([title_elem, price_elem, link_elem, img_elem]):
-                return None
+                return {}
             
             # Extract and structure data
             data = {
@@ -118,74 +120,15 @@ class EbayJewelryScraper:
                 'price': self.extract_price(price_elem.get_text(strip=True)),
                 'url': link_elem['href'],
                 'image_url': img_elem['src'],
-                'condition': condition_elem.get_text(strip=True) if condition_elem else None,
-                'subtitle': subtitle_elem.get_text(strip=True) if subtitle_elem else None,
+                'condition': condition_elem.get_text(strip=True) if condition_elem else 'Unknown',
             }
-            
-            # Get additional details from product page
-            if data['url']:
-                details = self.get_product_details(data['url'])
-                data.update(details)
             
             return data
             
         except Exception as e:
             logging.error(f"Error extracting item data: {e}")
-            return None
-
-    def get_product_details(self, url: str) -> Dict:
-        """
-        Get additional details from the product page.
-        
-        Args:
-            url (str): URL of the product page.
-        
-        Returns:
-            Dict: Dictionary containing additional details like description, specifications, and seller info.
-        """
-        details = {
-            'description': '',
-            'specifications': {},
-            'seller_info': {}
-        }
-        driver = None
-        try:
-            driver = setup_selenium_driver()
-            self.rotate_proxy_and_user_agent(driver)
-            driver.get(url)
-            time.sleep(2)  # Wait for page to load
-            
-            soup = BeautifulSoup(driver.page_source, 'html.parser')
-            
-            # Get product description
-            desc_elem = soup.select_one('#desc_wrapper')
-            if desc_elem:
-                details['description'] = desc_elem.get_text(separator=' ', strip=True)
-            
-            # Get specifications
-            spec_table = soup.select('div.itemAttr table tr')
-            for row in spec_table:
-                label = row.select_one('td.attrLabel')
-                value = row.select_one('td.attrValue')
-                if label and value:
-                    details['specifications'][label.get_text(strip=True)] = value.get_text(strip=True)
-            
-            # Get seller information
-            seller_elem = soup.select_one('#RightSummaryPanel .mbg .mbg-l a')
-            if seller_elem:
-                details['seller_info']['name'] = seller_elem.get_text(strip=True)
-                details['seller_info']['url'] = seller_elem['href']
-            
-        except WebDriverException as e:
-            logging.error(f"WebDriver exception while getting product details: {e}")
-        except Exception as e:
-            logging.error(f"Error getting product details: {e}")
-        finally:
-            if driver:
-                driver.quit()
-        
-        return details
-
+            return {}
+    
     def scrape_page(self, driver: webdriver.Chrome, url: str) -> List[Dict]:
         """
         Scrape a single search results page with improved handling.
@@ -257,7 +200,7 @@ class EbayJewelryScraper:
         page = 1
         
         try:
-            driver = setup_selenium_driver()
+            driver = setup_selenium_driver(proxies=self.proxies, user_agent=random.choice(self.user_agents))
             self.rotate_proxy_and_user_agent(driver)
             
             while len(all_items) < max_items and page <= max_pages:
@@ -274,7 +217,6 @@ class EbayJewelryScraper:
                         break
                         
                     try:
-                        # Process and save image is already handled in process_item
                         all_items.append(item)
                         logging.info(f"Processed item {len(all_items)}: {item['title'][:50]}...")
                         

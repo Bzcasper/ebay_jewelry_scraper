@@ -1,4 +1,5 @@
 # app.py
+
 from flask import Flask, render_template, jsonify, request, send_file
 import logging
 from scraper.core import EbayJewelryScraper
@@ -33,17 +34,29 @@ scraping_progress = {
 # Lock for thread-safe updates
 progress_lock = threading.Lock()
 
-# API Key for securing endpoints
-API_KEY = os.environ.get('API_KEY', 'your-secure-api-key')
+# API Key for securing endpoints (Removed as per user's request)
+# If you want to keep security, uncomment the following lines and related code
+# API_KEY = os.environ.get('API_KEY', 'your-secure-api-key')
+
+# def require_api_key(f):
+#     @wraps(f)
+#     def decorated(*args, **kwargs):
+#         key = request.headers.get('x-api-key')
+#         if key and key == API_KEY:
+#             return f(*args, **kwargs)
+#         else:
+#             logging.warning(f"Unauthorized access attempt from {request.remote_addr}")
+#             return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+#     return decorated
 
 def require_api_key(f):
+    """
+    Dummy decorator to bypass API key requirement.
+    Uncomment the above decorator and comment this if you want to enable API key security.
+    """
     @wraps(f)
     def decorated(*args, **kwargs):
-        key = request.headers.get('x-api-key')
-        if key and key == API_KEY:
-            return f(*args, **kwargs)
-        else:
-            return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+        return f(*args, **kwargs)
     return decorated
 
 @app.route('/')
@@ -138,7 +151,11 @@ def run_scraper(selected_classes):
                 'current_task': 'Initializing scraper'
             })
 
-        scraper = EbayJewelryScraper(output_dir=scraper_config.output_dir)
+        scraper = EbayJewelryScraper(
+            output_dir=scraper_config.output_dir,
+            proxies=scraper_config.proxies,
+            user_agents=scraper_config.user_agents
+        )
         processor = DatasetProcessor(base_dir=scraper_config.output_dir)
 
         for cls in selected_classes:
@@ -170,7 +187,8 @@ def run_scraper(selected_classes):
             resnet_zip_path = os.path.join(scraper_config.output_dir, "resnet50_dataset.zip")
             with zipfile.ZipFile(resnet_zip_path, 'w', zipfile.ZIP_DEFLATED) as resnet_zip:
                 resnet_training_csv = os.path.join(scraper_config.output_dir, "training_dataset", "resnet50_training.csv")
-                resnet_zip.write(resnet_training_csv, arcname="resnet50_training.csv")
+                if os.path.exists(resnet_training_csv):
+                    resnet_zip.write(resnet_training_csv, arcname="resnet50_training.csv")
                 # Add ResNet50 images
                 for root, dirs, files in os.walk(os.path.join(scraper_config.output_dir, "processed_images")):
                     for file in files:
@@ -185,7 +203,8 @@ def run_scraper(selected_classes):
             llava_zip_path = os.path.join(scraper_config.output_dir, "llava_dataset.zip")
             with zipfile.ZipFile(llava_zip_path, 'w', zipfile.ZIP_DEFLATED) as llava_zip:
                 llava_training_json = os.path.join(scraper_config.output_dir, "training_dataset", "llava_training.json")
-                llava_zip.write(llava_training_json, arcname="llava_training.json")
+                if os.path.exists(llava_training_json):
+                    llava_zip.write(llava_training_json, arcname="llava_training.json")
                 # Add LLaVA images
                 for root, dirs, files in os.walk(os.path.join(scraper_config.output_dir, "processed_images")):
                     for file in files:
@@ -235,11 +254,15 @@ def start_scraping():
         if not ('main_class' in cls and 'subcategories' in cls and isinstance(cls['subcategories'], list)):
             return jsonify({'status': 'error', 'message': 'Invalid selected_classes structure.'}), 400
 
+    # Check if scraping is already running
+    if scraping_progress['status'] == 'running':
+        return jsonify({'status': 'error', 'message': 'Scraping already in progress.'}), 400
+
     # Start scraping in a new thread
     thread = threading.Thread(target=run_scraper, args=(selected_classes,))
     thread.start()
     
-    return jsonify({'status': 'started'})
+    return jsonify({'status': 'started'}), 200
 
 @app.route('/progress', methods=['GET'])
 @require_api_key
@@ -248,7 +271,7 @@ def get_progress():
     Get the current scraping progress.
     """
     with progress_lock:
-        return jsonify(scraping_progress)
+        return jsonify(scraping_progress), 200
 
 @app.route('/download_dataset', methods=['GET'])
 @require_api_key
@@ -276,5 +299,4 @@ if __name__ == '__main__':
         os.makedirs(directory, exist_ok=True)
     
     # Run the Flask app
-    # Removed the invalid HTML comment
     app.run(host='0.0.0.0', port=5000, debug=True)

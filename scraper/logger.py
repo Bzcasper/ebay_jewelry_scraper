@@ -1,20 +1,17 @@
 # scraper/logger.py
+
 import logging
 import os
 
-def setup_logging(log_file: str = "scraper.log"):
-    """
-    Set up logging configurations.
+def setup_logging():
+    log_dir = os.path.join(os.getcwd(), 'logs')
+    os.makedirs(log_dir, exist_ok=True)
     
-    Args:
-        log_file (str): Path to the log file.
-    """
-    log_path = os.path.join(os.getcwd(), log_file)
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s [%(levelname)s] %(message)s',
+        format='%(asctime)s %(levelname)s: %(message)s',
         handlers=[
-            logging.FileHandler(log_path),
+            logging.FileHandler(os.path.join(log_dir, 'app.log')),
             logging.StreamHandler()
         ]
     )

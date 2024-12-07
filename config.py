@@ -1,7 +1,7 @@
 # config.py
+
 from dataclasses import dataclass, field
 from typing import List, Dict
-import json
 
 @dataclass
 class ScraperConfig:
@@ -21,7 +21,6 @@ class ScraperConfig:
         "http://123.456.789.0:8080",
         "http://234.567.890.1:8080",
         "http://345.678.901.2:8080",
-        # Add more proxies as needed
     ])
     user_agents: List[str] = field(default_factory=lambda: [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -30,7 +29,6 @@ class ScraperConfig:
         "Version/14.0.3 Safari/605.1.15",
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/90.0.4430.93 Safari/537.36",
-        # Add more user agents as needed
     ])
     
     def to_dict(self) -> Dict:
@@ -77,9 +75,3 @@ class ScraperConfig:
                 "Chrome/90.0.4430.93 Safari/537.36",
             ])
         )
-
-# Example usage:
-# To load configuration from a JSON file
-# with open('config.json', 'r') as f:
-#     config_data = json.load(f)
-# scraper_config = ScraperConfig.from_dict(config_data)

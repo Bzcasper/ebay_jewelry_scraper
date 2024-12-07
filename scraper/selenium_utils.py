@@ -1,17 +1,19 @@
 # scraper/selenium_utils.py
 
-import os  # Ensure 'os' is imported
+import os
+import logging
+import time
+import random
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager  # Ensure 'webdriver-manager' is imported
-import logging
-import time
-from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
 from typing import Optional, List
+from bs4 import BeautifulSoup
 
 def setup_selenium_driver(proxies: Optional[List[str]] = None, user_agent: Optional[str] = None) -> webdriver.Chrome:
     """

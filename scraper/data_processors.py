@@ -1,4 +1,5 @@
 # scraper/data_processors.py
+
 import os
 import json
 import logging
@@ -8,13 +9,13 @@ from io import BytesIO
 import pandas as pd
 from pathlib import Path
 import numpy as np
-from tqdm import tqdm  # Ensure tqdm is installed
-import torchvision.transforms as transforms  # Ensure torchvision is installed
+from tqdm import tqdm
+import torchvision.transforms as transforms
 import zipfile
 import shutil
 import time
 
-from typing import List, Dict, Optional  # Added imports
+from typing import List, Dict, Optional
 from dataclasses import dataclass, field
 
 @dataclass
@@ -46,7 +47,6 @@ class DatasetProcessor:
         "http://123.456.789.0:8080",
         "http://234.567.890.1:8080",
         "http://345.678.901.2:8080",
-        # Add more proxies as needed
     ])
     
     user_agents: List[str] = field(default_factory=lambda: [
@@ -56,7 +56,6 @@ class DatasetProcessor:
         "Version/14.0.3 Safari/605.1.15",
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/90.0.4430.93 Safari/537.36",
-        # Add more user agents as needed
     ])
     
     def __post_init__(self):
@@ -187,7 +186,7 @@ class DatasetProcessor:
         try:
             # Remove currency symbols and convert to float
             price = ''.join(c for c in price_text if c.isdigit() or c == '.')
-            return float(price)
+            return float(price) if price else None
         except ValueError:
             logging.warning(f"Unable to extract price from text: {price_text}")
             return None
