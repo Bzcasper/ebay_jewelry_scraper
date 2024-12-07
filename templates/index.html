@@ -1,0 +1,93 @@
+# templates/index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>eBay Jewelry Scraper</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 min-h-screen p-8">
+    <div class="max-w-3xl mx-auto">
+        <h1 class="text-3xl font-bold mb-8">eBay Jewelry Scraper</h1>
+        
+        <div class="bg-white rounded-lg shadow p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4">Start Scraping</h2>
+            
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm font-medium mb-2">Category</label>
+                    <select id="category" class="w-full border rounded p-2">
+                        <option value="Rings">Rings</option>
+                        <option value="Necklaces">Necklaces</option>
+                        <option value="Bracelets">Bracelets</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium mb-2">Subcategory</label>
+                    <select id="subcategory" class="w-full border rounded p-2">
+                        <option value="Engagement">Engagement</option>
+                        <option value="Fashion">Fashion</option>
+                        <option value="Wedding">Wedding</option>
+                    </select>
+                </div>
+            </div>
+            
+            <button onclick="startScraping()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                Start Scraping
+            </button>
+        </div>
+        
+        <div id="progress" class="bg-white rounded-lg shadow p-6 hidden">
+            <h2 class="text-xl font-semibold mb-4">Progress</h2>
+            <div class="space-y-2">
+                <p>Status: <span id="status" class="font-medium">-</span></p>
+                <p>Current Category: <span id="currentCategory" class="font-medium">-</span></p>
+                <p>Items Found: <span id="itemsFound" class="font-medium">0</span></p>
+                <p id="errorMessage" class="text-red-500 hidden"></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function startScraping() {
+            const category = document.getElementById('category').value;
+            const subcategory = document.getElementById('subcategory').value;
+            
+            document.getElementById('progress').classList.remove('hidden');
+            
+            fetch('/start_scraping', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ category, subcategory })
+            });
+            
+            // Start progress polling
+            pollProgress();
+        }
+        
+        function pollProgress() {
+            setInterval(() => {
+                fetch('/progress')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('status').textContent = data.status;
+                    document.getElementById('currentCategory').textContent = data.current_category || '-';
+                    document.getElementById('itemsFound').textContent = data.items_found;
+                    
+                    const errorElem = document.getElementById('errorMessage');
+                    if (data.error) {
+                        errorElem.textContent = `Error: ${data.error}`;
+                        errorElem.classList.remove('hidden');
+                    } else {
+                        errorElem.classList.add('hidden');
+                    }
+                });
+            }, 1000);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+# .gitignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+*.log
+jewelry_dataset/
+test_dataset/
+.DS_Store
+chromedriver
+debug.log
