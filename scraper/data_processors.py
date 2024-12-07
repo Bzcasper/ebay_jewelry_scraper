@@ -12,21 +12,75 @@ from tqdm import tqdm
 import torchvision.transforms as transforms
 import zipfile
 import shutil
+import time
 
+from typing import List, Dict, Optional
+from dataclasses import dataclass, field
+
+@dataclass
 class DatasetProcessor:
-    def __init__(self, base_dir="jewelry_dataset"):
-        self.base_dir = Path(base_dir)
+    base_dir: str = "jewelry_dataset"
+    images_dir: Path = field(init=False)
+    metadata_dir: Path = field(init=False)
+    raw_html_dir: Path = field(init=False)
+    dataset_dir: Path = field(init=False)
+    processed_images_dir: Path = field(init=False)
+    
+    # Image processing pipeline for ResNet50
+    resnet_transforms: transforms.Compose = field(init=False)
+    
+    # Image processing for LLaVA (keeping original aspect ratio and augmenting)
+    llava_transforms: transforms.Compose = field(init=False)
+    
+    categories: List[Dict] = field(default_factory=lambda: [
+        {'main_class': 'Necklace', 'subcategories': ['Choker', 'Pendant', 'Chain']},
+        {'main_class': 'Pendant', 'subcategories': ['Heart', 'Cross', 'Star']},
+        {'main_class': 'Bracelet', 'subcategories': ['Tennis', 'Charm', 'Bangle']},
+        {'main_class': 'Ring', 'subcategories': ['Engagement', 'Wedding', 'Fashion']},
+        {'main_class': 'Earring', 'subcategories': ['Stud', 'Hoop', 'Drop']},
+        {'main_class': 'Wristwatch', 'subcategories': ['Analog', 'Digital', 'Smart']},
+    ])
+    
+    proxies: List[str] = field(default_factory=lambda: [
+        # Add your proxy addresses here in the format "http://ip:port"
+        "http://123.456.789.0:8080",
+        "http://234.567.890.1:8080",
+        "http://345.678.901.2:8080",
+        # Add more proxies as needed
+    ])
+    
+    user_agents: List[str] = field(default_factory=lambda: [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/90.0.4430.93 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) "
+        "Version/14.0.3 Safari/605.1.15",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/90.0.4430.93 Safari/537.36",
+        # Add more user agents as needed
+    ])
+    
+    def __post_init__(self):
+        """
+        Initialize directories and image transformation pipelines.
+        """
+        self.base_dir = Path(self.base_dir)
         self.images_dir = self.base_dir / "processed_images"
         self.metadata_dir = self.base_dir / "metadata"
         self.raw_html_dir = self.base_dir / "raw_html"
         self.dataset_dir = self.base_dir / "training_dataset"
         self.processed_images_dir = self.base_dir / "processed_images"
         
-        # Create directories
-        for dir_path in [self.images_dir, self.metadata_dir, self.raw_html_dir, self.processed_images_dir, self.dataset_dir]:
+        # Create directories if they don't exist
+        for dir_path in [
+            self.images_dir, 
+            self.metadata_dir, 
+            self.raw_html_dir, 
+            self.processed_images_dir, 
+            self.dataset_dir
+        ]:
             dir_path.mkdir(parents=True, exist_ok=True)
-            
-        # Image processing pipeline for ResNet50
+        
+        # Define image transformations for ResNet50
         self.resnet_transforms = transforms.Compose([
             transforms.Resize(256),
             transforms.CenterCrop(224),
@@ -34,21 +88,32 @@ class DatasetProcessor:
             transforms.RandomRotation(15),
             transforms.ToTensor(),
             transforms.Normalize(
-                mean=[0.485, 0.456, 0.406],
-                std=[0.229, 0.224, 0.225]
+                mean=[0.485, 0.456, 0.406],  # Standard ImageNet mean
+                std=[0.229, 0.224, 0.225]    # Standard ImageNet std
             )
         ])
         
-        # Image processing for LLaVA (keeping original aspect ratio and augmenting)
+        # Define image transformations for LLaVA
         self.llava_transforms = transforms.Compose([
             transforms.Resize(512),
             transforms.RandomHorizontalFlip(),
             transforms.RandomRotation(15),
             transforms.ToTensor(),
         ])
-
-    def process_image(self, image_url, item_data, retries=3, timeout=10):
-        """Download and process image for both ResNet50 and LLaVA with augmentation"""
+    
+    def process_image(self, image_url: str, item_data: Dict, retries: int = 3, timeout: int = 10) -> bool:
+        """
+        Download and process image for both ResNet50 and LLaVA with augmentation.
+        
+        Args:
+            image_url (str): URL of the image to download.
+            item_data (Dict): Dictionary containing item data to update with image paths.
+            retries (int): Number of retries for downloading the image.
+            timeout (int): Timeout for the image download request.
+        
+        Returns:
+            bool: True if processing is successful, False otherwise.
+        """
         try:
             for attempt in range(retries):
                 try:
@@ -57,47 +122,65 @@ class DatasetProcessor:
                     response.raise_for_status()
                     image = Image.open(BytesIO(response.content)).convert('RGB')
                     
-                    # Generate unique filename
-                    filename = f"{item_data['category']}_{item_data['subcategory']}_{hash(image_url)}"
+                    # Generate unique filename using current timestamp and hash
+                    timestamp = int(time.time() * 1000)
+                    unique_hash = abs(hash(image_url)) % (10 ** 8)
+                    filename = f"{timestamp}_{unique_hash}"
                     
                     # Save original high-quality image for LLaVA
                     llava_path = self.processed_images_dir / f"{filename}_llava.jpg"
                     image.save(str(llava_path), 'JPEG', quality=95)
                     
                     # Process and save ResNet version with augmentation
-                    resnet_path = self.processed_images_dir / f"{filename}_resnet.jpg"
                     resnet_img = self.resnet_transforms(image)
-                    transforms.ToPILImage()(resnet_img).save(str(resnet_path))
+                    resnet_pil = transforms.ToPILImage()(resnet_img)
+                    resnet_path = self.processed_images_dir / f"{filename}_resnet.jpg"
+                    resnet_pil.save(str(resnet_path))
                     
-                    # Update item_data with image paths
-                    item_data['llava_image_path'] = str(llava_path)
-                    item_data['resnet_image_path'] = str(resnet_path)
-                    item_data['image_width'] = image.width
-                    item_data['image_height'] = image.height
-                    item_data['aspect_ratio'] = image.width / image.height
+                    # Update item_data with image paths and metadata
+                    item_data['llava_image_path'] = str(llava_path.resolve())
+                    item_data['resnet_image_path'] = str(resnet_path.resolve())
+                    item_data['image_width'], item_data['image_height'] = image.size
+                    item_data['aspect_ratio'] = round(image.width / image.height, 2) if image.height != 0 else 0
                     
+                    logging.info(f"Successfully processed image: {image_url}")
                     return True
                 except Exception as e:
                     logging.warning(f"Attempt {attempt + 1} failed to download/process image: {e}")
-                    time.sleep(2)
+                    time.sleep(2)  # Wait before retrying
             logging.error(f"Failed to download/process image after {retries} attempts: {image_url}")
             return False
-
         except Exception as e:
-            logging.error(f"Error processing image {image_url}: {e}")
+            logging.error(f"Unexpected error in process_image: {e}")
             return False
-
-    def clean_text(self, text):
-        """Clean and normalize text data"""
+    
+    def clean_text(self, text: Optional[str]) -> str:
+        """
+        Clean and normalize text data.
+        
+        Args:
+            text (Optional[str]): Text to clean.
+        
+        Returns:
+            str: Cleaned text.
+        """
         if not text:
             return ""
         
         # Remove special characters and normalize spacing
         cleaned = ' '.join(text.split())
         return cleaned.strip()
-
-    def extract_price(self, price_text):
-        """Extract numerical price from text"""
+    
+    def extract_price(self, price_text: str) -> Optional[float]:
+        """
+        Extract numerical price from text.
+        
+        Args:
+            price_text (str): Text containing the price.
+        
+        Returns:
+            Optional[float]: Extracted price or None if not found.
+        """
         if not price_text:
             return None
             
@@ -105,11 +188,20 @@ class DatasetProcessor:
             # Remove currency symbols and convert to float
             price = ''.join(c for c in price_text if c.isdigit() or c == '.')
             return float(price)
-        except:
+        except ValueError:
+            logging.warning(f"Unable to extract price from text: {price_text}")
             return None
-
-    def process_item(self, item_data):
-        """Process a single item's data and images"""
+    
+    def process_item(self, item_data: Dict) -> Optional[Dict]:
+        """
+        Process a single item's data and images.
+        
+        Args:
+            item_data (Dict): Dictionary containing raw item data.
+        
+        Returns:
+            Optional[Dict]: Processed item data or None if processing fails.
+        """
         try:
             # Process image
             if not self.process_image(item_data['image_url'], item_data):
@@ -117,7 +209,7 @@ class DatasetProcessor:
                 
             # Clean and structure metadata
             processed_data = {
-                'id': hash(item_data['url']),
+                'id': abs(hash(item_data['url'])) % (10 ** 8),  # Unique identifier
                 'category': self.clean_text(item_data['category']),
                 'subcategory': self.clean_text(item_data['subcategory']),
                 'title': self.clean_text(item_data['title']),
@@ -149,9 +241,17 @@ class DatasetProcessor:
         except Exception as e:
             logging.error(f"Error processing item: {e}")
             return None
-
-    def create_dataset(self, items):
-        """Create training dataset from processed items"""
+    
+    def create_dataset(self, items: List[Dict]) -> int:
+        """
+        Create training dataset from processed items.
+        
+        Args:
+            items (List[Dict]): List of processed item data.
+        
+        Returns:
+            int: Number of items processed.
+        """
         processed_items = []
         
         for item in tqdm(items, desc="Processing items"):
@@ -175,9 +275,10 @@ class DatasetProcessor:
             } for item in processed_items]
             
             resnet_df = pd.DataFrame(resnet_data)
-            resnet_df.to_csv(self.dataset_dir / "resnet50_training.csv", index=False)
+            resnet_csv_path = self.dataset_dir / "resnet50_training.csv"
+            resnet_df.to_csv(resnet_csv_path, index=False)
             
-            # Create LLaVA training format
+            # Create LLaVA training JSON
             llava_data = []
             for item in processed_items:
                 for caption in item['llava_captions']:
@@ -191,7 +292,8 @@ class DatasetProcessor:
                         }
                     })
             
-            with open(self.dataset_dir / "llava_training.json", 'w', encoding='utf-8') as f:
+            llava_json_path = self.dataset_dir / "llava_training.json"
+            with open(llava_json_path, 'w', encoding='utf-8') as f:
                 json.dump(llava_data, f, indent=2)
                 
             logging.info(f"Dataset created with {len(processed_items)} items.")

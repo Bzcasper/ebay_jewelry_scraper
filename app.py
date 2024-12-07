@@ -48,43 +48,64 @@ def require_api_key(f):
 
 @app.route('/')
 def index():
+    """
+    Render the main index page with the current scraper configuration.
+    """
     return render_template('index.html', config=scraper_config)
 
 @app.route('/config', methods=['GET'])
 @require_api_key
 def get_config():
-    return jsonify(vars(scraper_config))
+    """
+    Get the current scraper configuration.
+    """
+    return jsonify(scraper_config.to_dict())
 
 @app.route('/config', methods=['POST'])
 @require_api_key
 def update_config():
+    """
+    Update the scraper configuration based on the received JSON data.
+    """
     try:
         data = request.get_json()
+        if not data:
+            return jsonify({'status': 'error', 'message': 'No data provided.'}), 400
+
+        # Update categories if provided
         if 'categories' in data:
-            # Validate categories structure
-            if isinstance(data['categories'], list):
-                for cat in data['categories']:
+            categories = data['categories']
+            if isinstance(categories, list):
+                # Validate each category structure
+                for cat in categories:
                     if not ('main_class' in cat and 'subcategories' in cat and isinstance(cat['subcategories'], list)):
                         return jsonify({'status': 'error', 'message': 'Invalid categories structure.'}), 400
-                scraper_config.categories = data['categories']
+                scraper_config.categories = categories
             else:
                 return jsonify({'status': 'error', 'message': 'Categories should be a list.'}), 400
+
+        # Update max_items if provided
         if 'max_items' in data:
             max_items = int(data['max_items'])
             if max_items < 1:
                 return jsonify({'status': 'error', 'message': 'max_items must be at least 1.'}), 400
             scraper_config.max_items = max_items
+
+        # Update max_pages if provided
         if 'max_pages' in data:
             max_pages = int(data['max_pages'])
             if max_pages < 1:
                 return jsonify({'status': 'error', 'message': 'max_pages must be at least 1.'}), 400
             scraper_config.max_pages = max_pages
+
+        # Update output_dir if provided
         if 'output_dir' in data:
             output_dir = data['output_dir'].strip()
             if not output_dir:
                 return jsonify({'status': 'error', 'message': 'output_dir cannot be empty.'}), 400
             scraper_config.output_dir = output_dir
-        return jsonify({'status': 'success', 'config': vars(scraper_config)})
+
+        return jsonify({'status': 'success', 'config': scraper_config.to_dict()})
     except ValueError:
         return jsonify({'status': 'error', 'message': 'Invalid numerical value.'}), 400
     except Exception as e:
@@ -94,9 +115,16 @@ def update_config():
 @app.route('/categories', methods=['GET'])
 @require_api_key
 def get_categories():
+    """
+    Get the list of categories.
+    """
     return jsonify(scraper_config.categories)
 
 def run_scraper(selected_classes):
+    """
+    Function to run the scraper in a separate thread.
+    Updates the scraping_progress dictionary to reflect current progress.
+    """
     global scraping_progress
     try:
         with progress_lock:
@@ -109,10 +137,10 @@ def run_scraper(selected_classes):
                 'error': None,
                 'current_task': 'Initializing scraper'
             })
-        
+
         scraper = EbayJewelryScraper(output_dir=scraper_config.output_dir)
         processor = DatasetProcessor(base_dir=scraper_config.output_dir)
-        
+
         for cls in selected_classes:
             category = cls['main_class']
             subcategories = cls['subcategories']
@@ -134,7 +162,7 @@ def run_scraper(selected_classes):
                 processed_count = processor.create_dataset(items)
                 with progress_lock:
                     scraping_progress['processed_items'] += processed_count
-        
+
         # After scraping, create zip files
         final_zip_path = os.path.join(scraper_config.output_dir, "datasets.zip")
         with zipfile.ZipFile(final_zip_path, 'w', zipfile.ZIP_DEFLATED) as final_zip:
@@ -146,8 +174,10 @@ def run_scraper(selected_classes):
                 # Add ResNet50 images
                 for root, dirs, files in os.walk(os.path.join(scraper_config.output_dir, "processed_images")):
                     for file in files:
-                        if "resnet" in file:
-                            resnet_zip.write(os.path.join(root, file), arcname=os.path.join("images", file))
+                        if "resnet" in file.lower():
+                            file_path = os.path.join(root, file)
+                            arcname = os.path.join("images", file)
+                            resnet_zip.write(file_path, arcname=arcname)
             final_zip.write(resnet_zip_path, arcname="resnet50_dataset.zip")
             os.remove(resnet_zip_path)
             
@@ -159,8 +189,10 @@ def run_scraper(selected_classes):
                 # Add LLaVA images
                 for root, dirs, files in os.walk(os.path.join(scraper_config.output_dir, "processed_images")):
                     for file in files:
-                        if "llava" in file:
-                            llava_zip.write(os.path.join(root, file), arcname=os.path.join("images", file))
+                        if "llava" in file.lower():
+                            file_path = os.path.join(root, file)
+                            arcname = os.path.join("images", file)
+                            llava_zip.write(file_path, arcname=arcname)
             final_zip.write(llava_zip_path, arcname="llava_dataset.zip")
             os.remove(llava_zip_path)
         
@@ -182,12 +214,28 @@ def run_scraper(selected_classes):
 @app.route('/start_scraping', methods=['POST'])
 @require_api_key
 def start_scraping():
+    """
+    Start the scraping process in a separate thread.
+    Expects JSON data with 'selected_classes'.
+    """
     data = request.get_json()
+    if not data:
+        return jsonify({'status': 'error', 'message': 'No data provided.'}), 400
+
     selected_classes = data.get('selected_classes')
     
     if not selected_classes:
         return jsonify({'status': 'error', 'message': 'No classes selected for scraping.'}), 400
     
+    # Validate selected_classes structure
+    if not isinstance(selected_classes, list):
+        return jsonify({'status': 'error', 'message': 'selected_classes should be a list.'}), 400
+
+    for cls in selected_classes:
+        if not ('main_class' in cls and 'subcategories' in cls and isinstance(cls['subcategories'], list)):
+            return jsonify({'status': 'error', 'message': 'Invalid selected_classes structure.'}), 400
+
+    # Start scraping in a new thread
     thread = threading.Thread(target=run_scraper, args=(selected_classes,))
     thread.start()
     
@@ -196,12 +244,18 @@ def start_scraping():
 @app.route('/progress', methods=['GET'])
 @require_api_key
 def get_progress():
+    """
+    Get the current scraping progress.
+    """
     with progress_lock:
         return jsonify(scraping_progress)
 
 @app.route('/download_dataset', methods=['GET'])
 @require_api_key
 def download_dataset():
+    """
+    Download the final zipped dataset.
+    """
     dataset_path = os.path.join(scraper_config.output_dir, "datasets.zip")
     if os.path.exists(dataset_path):
         return send_file(dataset_path, as_attachment=True)
@@ -210,11 +264,16 @@ def download_dataset():
 
 if __name__ == '__main__':
     # Ensure output directories exist
-    os.makedirs(scraper_config.output_dir, exist_ok=True)
-    os.makedirs(os.path.join(scraper_config.output_dir, "raw_html"), exist_ok=True)
-    os.makedirs(os.path.join(scraper_config.output_dir, "processed_images"), exist_ok=True)
-    os.makedirs(os.path.join(scraper_config.output_dir, "training_dataset"), exist_ok=True)
-    os.makedirs(os.path.join(scraper_config.output_dir, "training_dataset", "resnet50_training"), exist_ok=True)
-    os.makedirs(os.path.join(scraper_config.output_dir, "training_dataset", "llava_training"), exist_ok=True)
+    required_dirs = [
+        scraper_config.output_dir,
+        os.path.join(scraper_config.output_dir, "raw_html"),
+        os.path.join(scraper_config.output_dir, "processed_images"),
+        os.path.join(scraper_config.output_dir, "training_dataset"),
+        os.path.join(scraper_config.output_dir, "training_dataset", "resnet50_training"),
+        os.path.join(scraper_config.output_dir, "training_dataset", "llava_training")
+    ]
+    for directory in required_dirs:
+        os.makedirs(directory, exist_ok=True)
     
+    # Run the Flask app
     app.run(host='0.0.0.0', port=5000, debug=True)

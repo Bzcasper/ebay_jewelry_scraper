@@ -1,35 +1,28 @@
-# Exclude version control directories
-.git
-.gitignore
+# .dockerignore
 
-# Exclude Python cache files and compiled bytecode
-__pycache__/
+__pycache__
 *.pyc
 *.pyo
 *.pyd
-
-# Exclude environment variable files
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.log
+*.sqlite3
+*.db
 .env
-.env.*
-
-# Exclude Docker-related files
-Dockerfile
-.dockerignore
-
-# Exclude IDE and editor configurations
+.git
+.gitignore
 .vscode/
 .idea/
-*.sublime-project
-*.sublime-workspace
-
-# Exclude log files
-*.log
-
-# Exclude OS-generated files
-.DS_Store
-Thumbs.db
-
-# Exclude virtual environments
-venv/
-ENV/
-env/
+*.md

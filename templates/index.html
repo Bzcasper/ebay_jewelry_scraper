@@ -11,6 +11,7 @@
     <div class="container">
         <h1>eBay Jewelry Scraper</h1>
         
+        <!-- Configuration Section -->
         <div class="config-section">
             <h2>Configuration</h2>
             <form id="config-form">
@@ -46,6 +47,7 @@
             </form>
         </div>
         
+        <!-- Scraping Section -->
         <div class="scrape-section">
             <h2>Start Scraping</h2>
             <form id="scrape-form">
@@ -57,8 +59,8 @@
                             <label for="main-{{ loop.index }}">{{ category.main_class }}</label>
                             <div class="subcategories">
                                 {% for subcat in category.subcategories %}
-                                    <input type="checkbox" class="subcat-checkbox" data-main="{{ category.main_class }}" data-sub="{{ subcat }}" id="sub-{{ loop.parent.loop.index }}-{{ loop.index }}">
-                                    <label for="sub-{{ loop.parent.loop.index }}-{{ loop.index }}">{{ subcat }}</label><br>
+                                    <input type="checkbox" class="subcat-checkbox" data-main="{{ category.main_class }}" data-sub="{{ subcat }}" id="sub-{{ loop.parent.index }}-{{ loop.index }}">
+                                    <label for="sub-{{ loop.parent.index }}-{{ loop.index }}">{{ subcat }}</label><br>
                                 {% endfor %}
                             </div>
                         </div>
@@ -68,6 +70,7 @@
             </form>
         </div>
         
+        <!-- Progress Section -->
         <div class="progress-section">
             <h2>Scraping Progress</h2>
             <div id="progress-status">

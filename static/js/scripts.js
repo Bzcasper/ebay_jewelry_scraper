@@ -1,53 +1,63 @@
 // static/js/scripts.js
-document.addEventListener('DOMContentLoaded', function() {
-    // API Key for secure communication
-    const API_KEY = 'your-secure-api-key'; // Replace with your actual API key
 
-    // Handle configuration form submission
+document.addEventListener('DOMContentLoaded', function() {
+    // Retrieve API Key from a secure source or environment variable
+    // For security reasons, avoid hardcoding API keys in frontend code.
+    // Instead, consider implementing secure authentication mechanisms.
+    const API_KEY = 'your-secure-api-key'; // Replace with your actual API key or fetch securely
+
+    // Handle Configuration Form Submission
     const configForm = document.getElementById('config-form');
     configForm.addEventListener('submit', function(e) {
         e.preventDefault();
-        const output_dir = document.getElementById('output_dir').value.trim();
-        const max_items = document.getElementById('max_items').value;
-        const max_pages = document.getElementById('max_pages').value;
-        
+
+        // Gather form data
+        const outputDir = document.getElementById('output_dir').value.trim();
+        const maxItems = parseInt(document.getElementById('max_items').value, 10);
+        const maxPages = parseInt(document.getElementById('max_pages').value, 10);
+
+        // Validate inputs
+        if (!outputDir) {
+            alert('Output directory cannot be empty.');
+            return;
+        }
+        if (isNaN(maxItems) || maxItems < 1) {
+            alert('Max items must be a positive integer.');
+            return;
+        }
+        if (isNaN(maxPages) || maxPages < 1) {
+            alert('Max pages must be a positive integer.');
+            return;
+        }
+
         // Gather categories and subcategories
         const categories = [];
         const categoryDivs = document.querySelectorAll('.category');
         categoryDivs.forEach(function(catDiv) {
-            const main_class = catDiv.querySelector('h4').innerText.trim();
-            const subcats = [];
+            const mainClass = catDiv.querySelector('h4').innerText.trim();
+            const subcategories = [];
             const subcatLis = catDiv.querySelectorAll('ul li');
             subcatLis.forEach(function(li) {
-                const subcat = li.firstChild.textContent.trim();
-                if(subcat) {
-                    subcats.push(subcat);
+                const subcatText = li.firstChild.textContent.trim();
+                if (subcatText) {
+                    subcategories.push(subcatText);
                 }
             });
-            categories.push({'main_class': main_class, 'subcategories': subcats});
+            categories.push({
+                'main_class': mainClass,
+                'subcategories': subcategories
+            });
         });
-        
-        // Validate inputs
-        if(!output_dir) {
-            alert('Output directory cannot be empty.');
-            return;
-        }
-        if(max_items < 1) {
-            alert('Max items must be at least 1.');
-            return;
-        }
-        if(max_pages < 1) {
-            alert('Max pages must be at least 1.');
-            return;
-        }
-        
+
+        // Prepare data payload
         const data = {
-            'output_dir': output_dir,
-            'max_items': max_items,
-            'max_pages': max_pages,
+            'output_dir': outputDir,
+            'max_items': maxItems,
+            'max_pages': maxPages,
             'categories': categories
         };
-        
+
+        // Send POST request to update configuration
         fetch('/config', {
             method: 'POST',
             headers: {
@@ -55,76 +65,94 @@ document.addEventListener('DOMContentLoaded', function() {
                 'x-api-key': API_KEY
             },
             body: JSON.stringify(data)
-        }).then(response => response.json())
-          .then(result => {
-              if(result.status === 'success') {
-                  alert('Configuration updated successfully!');
-              } else {
-                  alert('Error updating configuration: ' + result.message);
-              }
-          })
-          .catch(error => {
-              console.error('Error:', error);
-          });
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.status === 'success') {
+                alert('Configuration updated successfully!');
+                // Optionally, update the UI with new configuration
+            } else {
+                alert('Error updating configuration: ' + result.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while updating configuration.');
+        });
     });
-    
-    // Handle adding subcategories
+
+    // Handle Adding Subcategories
     const addSubcatButtons = document.querySelectorAll('.add-subcat');
     addSubcatButtons.forEach(function(button) {
         button.addEventListener('click', function() {
-            const main_class = this.getAttribute('data-main');
+            const mainClass = this.getAttribute('data-main');
             const input = this.previousElementSibling;
-            const subcat = input.value.trim();
-            if(subcat === '') {
+            const newSubcat = input.value.trim();
+
+            if (newSubcat === '') {
                 alert('Subcategory cannot be empty.');
                 return;
             }
-            // Append to the list
-            const categoryDiv = this.parentElement;
-            const ul = categoryDiv.querySelector('ul');
+
+            // Check for duplicate subcategories
+            const existingSubcats = Array.from(this.parentElement.querySelectorAll('ul li')).map(li => li.firstChild.textContent.trim().toLowerCase());
+            if (existingSubcats.includes(newSubcat.toLowerCase())) {
+                alert('Subcategory already exists.');
+                return;
+            }
+
+            // Create new list item
             const li = document.createElement('li');
-            li.innerHTML = `${subcat} <button type="button" class="remove-subcat" data-main="${main_class}" data-sub="${subcat}">Remove</button>`;
-            ul.appendChild(li);
+            li.innerHTML = `${newSubcat} <button type="button" class="remove-subcat" data-main="${mainClass}" data-sub="${newSubcat}">Remove</button>`;
+            this.parentElement.querySelector('ul').appendChild(li);
             input.value = '';
         });
     });
-    
-    // Handle removing subcategories
+
+    // Handle Removing Subcategories (Event Delegation)
     document.getElementById('categories-container').addEventListener('click', function(e) {
-        if(e.target && e.target.classList.contains('remove-subcat')) {
-            const main_class = e.target.getAttribute('data-main');
+        if (e.target && e.target.classList.contains('remove-subcat')) {
+            const mainClass = e.target.getAttribute('data-main');
             const subcat = e.target.getAttribute('data-sub');
-            if(confirm(`Remove subcategory "${subcat}" from "${main_class}"?`)) {
+
+            if (confirm(`Are you sure you want to remove the subcategory "${subcat}" from "${mainClass}"?`)) {
                 e.target.parentElement.remove();
             }
         }
     });
-    
-    // Handle scrape form submission
+
+    // Handle Scraping Form Submission
     const scrapeForm = document.getElementById('scrape-form');
     scrapeForm.addEventListener('submit', function(e) {
         e.preventDefault();
+
+        // Gather selected classes and subcategories
         const selectedClasses = [];
-        const mainClassCheckboxes = document.querySelectorAll('.main-class');
+        const mainClassCheckboxes = document.querySelectorAll('.main-class:checked');
         mainClassCheckboxes.forEach(function(mainCheckbox) {
-            if(mainCheckbox.checked) {
-                const main_class = mainCheckbox.getAttribute('data-main');
-                const subcatCheckboxes = document.querySelectorAll(`.subcat-checkbox[data-main="${main_class}"]:checked`);
-                const subcategories = [];
-                subcatCheckboxes.forEach(function(subCheckbox) {
-                    subcategories.push(subCheckbox.getAttribute('data-sub'));
+            const mainClass = mainCheckbox.getAttribute('data-main');
+            const subcatCheckboxes = document.querySelectorAll(`.subcat-checkbox[data-main="${mainClass}"]:checked`);
+            const selectedSubcats = Array.from(subcatCheckboxes).map(subCheckbox => subCheckbox.getAttribute('data-sub'));
+
+            if (selectedSubcats.length > 0) {
+                selectedClasses.push({
+                    'main_class': mainClass,
+                    'subcategories': selectedSubcats
                 });
-                if(subcategories.length > 0) {
-                    selectedClasses.push({'main_class': main_class, 'subcategories': subcategories});
-                }
             }
         });
-        
-        if(selectedClasses.length === 0) {
+
+        if (selectedClasses.length === 0) {
             alert('Please select at least one subcategory to scrape.');
             return;
         }
-        
+
+        // Confirm scraping action
+        if (!confirm('Are you sure you want to start scraping the selected subcategories?')) {
+            return;
+        }
+
+        // Send POST request to start scraping
         fetch('/start_scraping', {
             method: 'POST',
             headers: {
@@ -132,22 +160,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 'x-api-key': API_KEY
             },
             body: JSON.stringify({'selected_classes': selectedClasses})
-        }).then(response => response.json())
-          .then(result => {
-              if(result.status === 'started') {
-                  alert('Scraping started!');
-                  // Start polling for progress
-                  pollProgress();
-              } else {
-                  alert('Error starting scraping: ' + result.message);
-              }
-          })
-          .catch(error => {
-              console.error('Error:', error);
-          });
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.status === 'started') {
+                alert('Scraping has started successfully!');
+                // Start polling for progress updates
+                pollProgress();
+            } else {
+                alert('Error starting scraping: ' + result.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while starting the scraping process.');
+        });
     });
-    
-    // Polling function to update progress
+
+    // Polling Function to Update Scraping Progress
     function pollProgress() {
         const progressInterval = setInterval(function() {
             fetch('/progress', {
@@ -156,33 +186,34 @@ document.addEventListener('DOMContentLoaded', function() {
                     'x-api-key': API_KEY
                 }
             })
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('status').innerText = data.status;
-                    document.getElementById('current_class').innerText = data.current_class || 'None';
-                    document.getElementById('current_subcategory').innerText = data.current_subcategory || 'None';
-                    document.getElementById('items_found').innerText = data.items_found;
-                    document.getElementById('processed_items').innerText = data.processed_items;
-                    document.getElementById('error').innerText = data.error || 'None';
-                    document.getElementById('current_task').innerText = data.current_task || 'None';
-                    
-                    if(data.status === 'completed') {
-                        clearInterval(progressInterval);
-                        alert('Scraping and dataset creation completed!');
-                        document.getElementById('download-button').style.display = 'block';
-                    }
-                    if(data.status === 'error') {
-                        clearInterval(progressInterval);
-                        alert('An error occurred during scraping. Check logs for details.');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error fetching progress:', error);
-                });
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('status').innerText = data.status || 'Unknown';
+                document.getElementById('current_class').innerText = data.current_class || 'None';
+                document.getElementById('current_subcategory').innerText = data.current_subcategory || 'None';
+                document.getElementById('items_found').innerText = data.items_found || 0;
+                document.getElementById('processed_items').innerText = data.processed_items || 0;
+                document.getElementById('error').innerText = data.error || 'None';
+                document.getElementById('current_task').innerText = data.current_task || 'None';
+
+                if (data.status === 'completed') {
+                    clearInterval(progressInterval);
+                    alert('Scraping and dataset creation completed successfully!');
+                    document.getElementById('download-button').style.display = 'block';
+                }
+
+                if (data.status === 'error') {
+                    clearInterval(progressInterval);
+                    alert('An error occurred during scraping. Please check the logs for details.');
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching progress:', error);
+            });
         }, 5000); // Poll every 5 seconds
     }
-    
-    // Handle dataset download
+
+    // Handle Dataset Download
     const downloadButton = document.getElementById('download-button');
     downloadButton.addEventListener('click', function() {
         fetch('/download_dataset', {
@@ -192,7 +223,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         })
         .then(response => {
-            if(response.ok) {
+            if (response.ok) {
                 return response.blob();
             } else {
                 return response.json().then(data => { throw new Error(data.message); });

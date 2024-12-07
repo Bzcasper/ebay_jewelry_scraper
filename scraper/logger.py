@@ -1,19 +1,20 @@
 # scraper/logger.py
 import logging
-from google.cloud import logging as cloud_logging
 import os
 
-def setup_logging():
-    # Initialize standard logging
+def setup_logging(log_file: str = "scraper.log"):
+    """
+    Set up logging configurations.
+    
+    Args:
+        log_file (str): Path to the log file.
+    """
+    log_path = os.path.join(os.getcwd(), log_file)
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s'
+        format='%(asctime)s [%(levelname)s] %(message)s',
+        handlers=[
+            logging.FileHandler(log_path),
+            logging.StreamHandler()
+        ]
     )
-    
-    # Initialize Google Cloud Logging if credentials are provided
-    if os.getenv('GOOGLE_APPLICATION_CREDENTIALS'):
-        client = cloud_logging.Client()
-        client.setup_logging()
-        logging.info("Google Cloud Logging initialized.")
-    else:
-        logging.warning("Google Cloud Credentials not found. Using standard logging.")
