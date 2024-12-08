@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Jewelry Dataset Creator{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Overview Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Scraping Progress -->
+        <div class="stat-card">
+            <h3 class="text-lg font-medium text-gray-900">Scraping Progress</h3>
+            <div class="mt-5">
+                <div class="stat-value" id="totalScraped">{{ stats.scraping.total_items }}</div>
+                <div class="stat-label">Total Items Scraped</div>
+            </div>
+            <div class="mt-4">
+                <div class="text-sm font-medium text-gray-500">Success Rate</div>
+                <div class="text-2xl font-semibold text-gray-900" id="successRate">
+                    {{ "%.1f"|format(stats.scraping.success_rate) }}%
+                </div>
+            </div>
+        </div>
+
+        <!-- Dataset Stats -->
+        <div class="stat-card">
+            <h3 class="text-lg font-medium text-gray-900">Datasets</h3>
+            <div class="space-y-4 mt-5">
+                <div>
+                    <div class="stat-label">ResNet-50 Dataset</div>
+                    <div class="stat-value" id="resnetTotal">{{ stats.dataset.resnet.total_images }}</div>
+                </div>
+                <div>
+                    <div class="stat-label">LLaVA Dataset</div>
+                    <div class="stat-value" id="llavaTotal">{{ stats.dataset.llava.total_images }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Resource Usage -->
+        <div class="stat-card">
+            <h3 class="text-lg font-medium text-gray-900">System Resources</h3>
+            <div class="space-y-4 mt-5">
+                <div>
+                    <div class="stat-label">CPU Usage</div>
+                    <div class="stat-value" id="cpuUsage">
+                        {{ "%.1f"|format(stats.resources.cpu_usage) }}%
+                    </div>
+                </div>
+                <div>
+                    <div class="stat-label">Memory Usage</div>
+                    <div class="stat-value" id="memoryUsage">
+                        {{ format_bytes(stats.resources.memory_usage) }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Tasks -->
+    <div class="info-card">
+        <div class="info-card-header">
+            <h3 class="text-lg font-medium text-gray-900">Active Tasks</h3>
+        </div>
+        <div class="info-card-body">
+            <div class="flow-root">
+                <ul role="list" class="-my-5 divide-y divide-gray-200" id="activeTasks">
+                    {% for task in active_tasks %}
+                    <li class="py-4">
+                        <div class="flex items-center space-x-4">
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-medium text-gray-900 truncate">
+                                    {{ task.type|title }} Task
+                                </p>
+                                <p class="text-sm text-gray-500">
+                                    Started {{ task.started_at|humanize }}
+                                </p>
+                            </div>
+                            <div>
+                                <span class="status-badge {{ task.status }}">
+                                    {{ task.status|title }}
+                                </span>
+                            </div>
+                        </div>
+                        {% if task.progress %}
+                        <div class="mt-2">
+                            <div class="progress-container">
+                                <div class="progress-bar" 
+                                     style="width: {{ task.progress }}%">
+                                </div>
+                            </div>
+                            <p class="text-xs text-gray-500">
+                                {{ task.progress }}% Complete
+                            </p>
+                        </div>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Errors -->
+    <div class="info-card">
+        <div class="info-card-header">
+            <h3 class="text-lg font-medium text-gray-900">Recent Errors</h3>
+        </div>
+        <div class="info-card-body">
+            <div class="flow-root">
+                <ul role="list" class="-my-5 divide-y divide-gray-200" id="errorList">
+                    {% for error in recent_errors %}
+                    <li class="py-4">
+                        <div class="flex items-center space-x-4">
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-medium text-red-600 truncate">
+                                    {{ error.type }}
+                                </p>
+                                <p class="text-sm text-gray-500">
+                                    {{ error.message }}
+                                </p>
+                                <p class="text-xs text-gray-400">
+                                    {{ error.timestamp|humanize }}
+                                </p>
+                            </div>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Initialize real-time updates
+    document.addEventListener('DOMContentLoaded', function() {
+        // Update stats every 5 seconds
+        setInterval(updateStats, 5000);
+        
+        // Update active tasks every second
+        setInterval(updateActiveTasks, 1000);
+    });
+</script>
+{% endblock %}

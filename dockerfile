@@ -1,10 +1,12 @@
 # Use Python 3.9 slim image as base
 FROM python:3.9-slim
 
-# Set working directory
-WORKDIR /app
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies including Chrome and required libraries
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
@@ -12,9 +14,14 @@ RUN apt-get update && apt-get install -y \
     unzip \
     chromium \
     chromium-driver \
+    build-essential \
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
+# Set working directory
+WORKDIR /app
+
+# Install Python dependencies first to leverage Docker cache
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -22,19 +29,27 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Create necessary directories
-RUN mkdir -p jewelry_dataset/images \
-    jewelry_dataset/metadata \
-    jewelry_dataset/raw_html \
-    jewelry_dataset/processed_images \
-    jewelry_dataset/training_dataset
+RUN mkdir -p \
+    jewelry_dataset/raw_data \
+    jewelry_dataset/processed_data \
+    jewelry_dataset/datasets \
+    logs \
+    config \
+    temp
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV CHROMIUM_PATH=/usr/bin/chromium
-ENV CHROMEDRIVER_PATH=/usr/bin/chromedriver
+# Set Chrome environment variables
+ENV CHROME_BIN=/usr/bin/chromium \
+    CHROME_PATH=/usr/lib/chromium/ \
+    CHROMEDRIVER_PATH=/usr/bin/chromedriver
 
-# Expose port for Flask
+# Set permissions
+RUN chmod -R 777 /app/jewelry_dataset \
+    && chmod -R 777 /app/logs \
+    && chmod -R 777 /app/config \
+    && chmod -R 777 /app/temp
+
+# Expose port
 EXPOSE 5000
 
-# Run the Flask application
-CMD ["python", "app.py"]
+# Run the application
+CMD ["python", "run.py"]

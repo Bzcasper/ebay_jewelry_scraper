@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}Datasets - Jewelry Dataset Creator{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Dataset Creation Controls -->
+    <div class="bg-white shadow rounded-lg p-6">
+        <h2 class="text-lg font-medium text-gray-900 mb-4">Dataset Creation</h2>
+        
+        <div class="space-y-4">
+            <p class="text-sm text-gray-500">
+                Create training datasets for both ResNet-50 and LLaVA models from scraped data.
+            </p>
+            
+            <div class="flex space-x-4">
+                <button onclick="createDatasets()" 
+                        class="btn btn-primary">
+                    Create Datasets
+                </button>
+                
+                <div class="flex space-x-2">
+                    <button onclick="downloadDataset('resnet')"
+                            class="btn btn-secondary">
+                        Download ResNet Dataset
+                    </button>
+                    <button onclick="downloadDataset('llava')"
+                            class="btn btn-secondary">
+                        Download LLaVA Dataset
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dataset Statistics -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- ResNet-50 Dataset -->
+        <div class="bg-white shadow rounded-lg p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">ResNet-50 Dataset</h3>
+            
+            <div class="space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-sm text-gray-500">Total Images</p>
+                        <p class="text-2xl font-semibold text-gray-900" id="resnetTotal">
+                            {{ stats.resnet.total_images }}
+                        </p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">Dataset Size</p>
+                        <p class="text-2xl font-semibold text-gray-900" id="resnetSize">
+                            {{ "%.2f"|format(stats.resnet.size_mb) }} MB
+                        </p>
+                    </div>
+                </div>
+                
+                <!-- Split Distribution -->
+                <div>
+                    <p class="text-sm text-gray-500 mb-2">Data Split Distribution</p>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5">
+                        <div class="bg-blue-600 h-2.5 rounded-full" style="width: 70%"></div>
+                        <div class="bg-green-600 h-2.5 rounded-full" style="width: 15%"></div>
+                        <div class="bg-yellow-600 h-2.5 rounded-full" style="width: 15%"></div>
+                    </div>
+                    <div class="flex justify-between text-xs text-gray-500 mt-1">
+                        <span>Training (70%)</span>
+                        <span>Validation (15%)</span>
+                        <span>Test (15%)</span>
+                    </div>
+                </div>
+                
+                <!-- Category Distribution -->
+                <div>
+                    <p class="text-sm text-gray-500 mb-2">Category Distribution</p>
+                    <div class="space-y-2">
+                        {% for category, count in stats.resnet.category_distribution.items() %}
+                        <div>
+                            <div class="flex justify-between text-xs text-gray-600">
+                                <span>{{ category }}</span>
+                                <span>{{ count }}</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-1.5">
+                                <div class="bg-indigo-600 h-1.5 rounded-full" 
+                                     style="width: {{ (count / stats.resnet.total_images * 100)|round }}%">
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- LLaVA Dataset -->
+        <div class="bg-white shadow rounded-lg p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">LLaVA Dataset</h3>
+            
+            <div class="space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-sm text-gray-500">Total Images</p>
+                        <p class="text-2xl font-semibold text-gray-900" id="llavaTotal">
+                            {{ stats.llava.total_images }}
+                        </p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">Dataset Size</p>
+                        <p class="text-2xl font-semibold text-gray-900" id="llavaSize">
+                            {{ "%.2f"|format(stats.llava.size_mb) }} MB
+                        </p>
+                    </div>
+                </div>
+                
+                <!-- Caption Statistics -->
+                <div>
+                    <p class="text-sm text-gray-500 mb-2">Caption Statistics</p>
+                    <div class="grid grid-cols-3 gap-4">
+                        <div>
+                            <p class="text-xs text-gray-500">Avg Length</p>
+                            <p class="text-lg font-semibold text-gray-900">
+                                {{ "%.1f"|format(stats.llava.avg_caption_length) }}
+                            </p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500">Min Length</p>
+                            <p class="text-lg font-semibold text-gray-900">
+                                {{ stats.llava.min_caption_length }}
+                            </p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500">Max Length</p>
+                            <p class="text-lg font-semibold text-gray-900">
+                                {{ stats.llava.max_caption_length }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Split Distribution -->
+                <div>
+                    <p class="text-sm text-gray-500 mb-2">Data Split Distribution</p>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5">
+                        <div class="bg-blue-600 h-2.5 rounded-full" style="width: 70%"></div>
+                        <div class="bg-green-600 h-2.5 rounded-full" style="width: 15%"></div>
+                        <div class="bg-yellow-600 h-2.5 rounded-full" style="width: 15%"></div>
+                    </div>
+                    <div class="flex justify-between text-xs text-gray-500 mt-1">
+                        <span>Training (70%)</span>
+                        <span>Validation (15%)</span>
+                        <span>Test (15%)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

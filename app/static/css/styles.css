@@ -1,0 +1,195 @@
+/* Custom styles for jewelry dataset creator */
+
+/* Base styles */
+:root {
+    --primary-color: #4F46E5;
+    --secondary-color: #7C3AED;
+    --success-color: #10B981;
+    --error-color: #EF4444;
+    --warning-color: #F59E0B;
+}
+
+/* Typography */
+body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* Custom components */
+
+/* Category cards */
+.category-card {
+    @apply bg-white rounded-lg shadow-md p-6 transition-all duration-200;
+}
+
+.category-card:hover {
+    @apply shadow-lg transform translate-y-[-2px];
+}
+
+.category-title {
+    @apply text-lg font-semibold text-gray-900 mb-2;
+}
+
+.subcategory-list {
+    @apply space-y-2 ml-4;
+}
+
+/* Progress bars */
+.progress-container {
+    @apply w-full bg-gray-200 rounded-full h-2.5 mb-4 dark:bg-gray-700;
+}
+
+.progress-bar {
+    @apply bg-primary-600 h-2.5 rounded-full transition-all duration-300;
+}
+
+/* Status badges */
+.status-badge {
+    @apply px-2 py-1 rounded-full text-xs font-semibold;
+}
+
+.status-badge.running {
+    @apply bg-blue-100 text-blue-800;
+}
+
+.status-badge.completed {
+    @apply bg-green-100 text-green-800;
+}
+
+.status-badge.error {
+    @apply bg-red-100 text-red-800;
+}
+
+/* Statistics cards */
+.stat-card {
+    @apply bg-white rounded-lg shadow p-6;
+}
+
+.stat-value {
+    @apply text-3xl font-bold text-gray-900;
+}
+
+.stat-label {
+    @apply text-sm font-medium text-gray-500;
+}
+
+/* Forms */
+.form-input {
+    @apply mt-1 block w-full rounded-md border-gray-300 shadow-sm 
+           focus:border-primary-500 focus:ring-primary-500;
+}
+
+.form-select {
+    @apply mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm 
+           focus:outline-none focus:ring-primary-500 focus:border-primary-500;
+}
+
+.form-checkbox {
+    @apply rounded border-gray-300 text-primary-600 shadow-sm 
+           focus:border-primary-500 focus:ring-primary-500;
+}
+
+/* Buttons */
+.btn {
+    @apply inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm 
+           focus:outline-none focus:ring-2 focus:ring-offset-2;
+}
+
+.btn-primary {
+    @apply bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500;
+}
+
+.btn-secondary {
+    @apply bg-white text-gray-700 border-gray-300 hover:bg-gray-50 focus:ring-gray-500;
+}
+
+.btn-success {
+    @apply bg-success-600 text-white hover:bg-success-700 focus:ring-success-500;
+}
+
+.btn-danger {
+    @apply bg-error-600 text-white hover:bg-error-700 focus:ring-error-500;
+}
+
+/* Loading states */
+.loading {
+    @apply animate-pulse;
+}
+
+.loading-overlay {
+    @apply absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center;
+}
+
+.spinner {
+    @apply animate-spin h-8 w-8 text-white;
+}
+
+/* Tooltips */
+.tooltip {
+    @apply invisible absolute;
+}
+
+.has-tooltip:hover .tooltip {
+    @apply visible z-50;
+}
+
+/* Tables */
+.data-table {
+    @apply min-w-full divide-y divide-gray-200;
+}
+
+.data-table th {
+    @apply px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider;
+}
+
+.data-table td {
+    @apply px-6 py-4 whitespace-nowrap text-sm text-gray-900;
+}
+
+/* Cards */
+.info-card {
+    @apply bg-white overflow-hidden shadow rounded-lg divide-y divide-gray-200;
+}
+
+.info-card-header {
+    @apply px-4 py-5 sm:px-6;
+}
+
+.info-card-body {
+    @apply px-4 py-5 sm:p-6;
+}
+
+/* Alerts */
+.alert {
+    @apply rounded-md p-4 mb-4;
+}
+
+.alert-success {
+    @apply bg-success-50 text-success-800;
+}
+
+.alert-error {
+    @apply bg-error-50 text-error-800;
+}
+
+.alert-warning {
+    @apply bg-warning-50 text-warning-800;
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes slideIn {
+    from { transform: translateY(-10px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.slide-in {
+    animation: slideIn 0.3s ease-out;
+}
