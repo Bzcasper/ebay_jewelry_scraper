@@ -1,7 +1,7 @@
-# Use Python 3.9 slim image as base
-FROM python:3.9-slim
+# Use Python 3.9 slim image as the base
+FROM python:3.10-slim
 
-# Set environment variables
+# Set environment variables to optimize the Python environment and prevent interactive prompts
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     DEBIAN_FRONTEND=noninteractive
@@ -18,17 +18,17 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
+# Set the working directory for the application
 WORKDIR /app
 
-# Install Python dependencies first to leverage Docker cache
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy and install Python dependencies separately to leverage Docker cache
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# Copy application code
-COPY . .
+# Copy the entire application code into the container
+COPY . /app
 
-# Create necessary directories
+# Create necessary directories for datasets, logs, and configurations
 RUN mkdir -p \
     jewelry_dataset/raw_data \
     jewelry_dataset/processed_data \
@@ -37,19 +37,19 @@ RUN mkdir -p \
     config \
     temp
 
-# Set Chrome environment variables
+# Set Chrome-related environment variables
 ENV CHROME_BIN=/usr/bin/chromium \
     CHROME_PATH=/usr/lib/chromium/ \
     CHROMEDRIVER_PATH=/usr/bin/chromedriver
 
-# Set permissions
+# Adjust directory permissions for accessibility
 RUN chmod -R 777 /app/jewelry_dataset \
     && chmod -R 777 /app/logs \
     && chmod -R 777 /app/config \
     && chmod -R 777 /app/temp
 
-# Expose port
+# Expose the Flask application port
 EXPOSE 5000
 
-# Run the application
+# Set the default command to run the application
 CMD ["python", "run.py"]

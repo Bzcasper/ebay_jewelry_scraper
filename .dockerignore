@@ -28,3 +28,4 @@ jewelry_dataset/
 .idea/
 *.sublime-project
 *.sublime-workspace
+!requirements.txt
