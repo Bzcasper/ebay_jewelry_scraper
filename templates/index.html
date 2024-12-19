@@ -1,93 +1,318 @@
-# templates/index.html
+<!-- templates/index.html -->
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>eBay Jewelry Scraper</title>
+    <title>eBay Jewelry Scraper Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-<body class="bg-gray-100 min-h-screen p-8">
-    <div class="max-w-3xl mx-auto">
-        <h1 class="text-3xl font-bold mb-8">eBay Jewelry Scraper</h1>
-        
-        <div class="bg-white rounded-lg shadow p-6 mb-8">
-            <h2 class="text-xl font-semibold mb-4">Start Scraping</h2>
-            
-            <div class="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                    <label class="block text-sm font-medium mb-2">Category</label>
-                    <select id="category" class="w-full border rounded p-2">
-                        <option value="Rings">Rings</option>
-                        <option value="Necklaces">Necklaces</option>
-                        <option value="Bracelets">Bracelets</option>
-                    </select>
-                </div>
-                
-                <div>
-                    <label class="block text-sm font-medium mb-2">Subcategory</label>
-                    <select id="subcategory" class="w-full border rounded p-2">
-                        <option value="Engagement">Engagement</option>
-                        <option value="Fashion">Fashion</option>
-                        <option value="Wedding">Wedding</option>
-                    </select>
+
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h1 class="text-3xl font-bold text-gray-800 mb-4">eBay Jewelry Scraper</h1>
+            <p class="text-gray-600">Scrape and analyze jewelry listings from eBay</p>
+        </div>
+
+        <!-- Control Panel -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+            <!-- Scraping Controls -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold mb-4">Start New Scrape</h2>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-gray-700 mb-2">Category:</label>
+                        <select id="category" class="w-full p-2 border rounded">
+                            <option value="Rings">Rings</option>
+                            <option value="Necklaces">Necklaces</option>
+                            <option value="Bracelets">Bracelets</option>
+                            <option value="Earrings">Earrings</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-gray-700 mb-2">Subcategory:</label>
+                        <select id="subcategory" class="w-full p-2 border rounded">
+                            <!-- Populated by JavaScript -->
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-gray-700 mb-2">Max Items:</label>
+                        <input type="number" id="maxItems" value="10" min="1" max="100"
+                            class="w-full p-2 border rounded">
+                    </div>
+
+                    <button id="startButton" class="w-full bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600
+                                   transition duration-200">
+                        Start Scraping
+                    </button>
                 </div>
             </div>
-            
-            <button onclick="startScraping()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
-                Start Scraping
-            </button>
+
+            <!-- Progress Display -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold mb-4">Scraping Progress</h2>
+
+                <div id="progress" class="hidden space-y-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-gray-700">Status:</span>
+                        <span id="status" class="font-medium">Idle</span>
+                    </div>
+
+                    <div class="flex items-center justify-between">
+                        <span class="text-gray-700">Current Category:</span>
+                        <span id="currentCategory" class="font-medium">-</span>
+                    </div>
+
+                    <div class="flex items-center justify-between">
+                        <span class="text-gray-700">Items Found:</span>
+                        <span id="itemsFound" class="font-medium">0</span>
+                    </div>
+
+                    <div class="w-full bg-gray-200 rounded-full h-2.5">
+                        <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+                    </div>
+
+                    <div id="errorMessage" class="hidden text-red-500 mt-4"></div>
+                </div>
+            </div>
         </div>
-        
-        <div id="progress" class="bg-white rounded-lg shadow p-6 hidden">
-            <h2 class="text-xl font-semibold mb-4">Progress</h2>
-            <div class="space-y-2">
-                <p>Status: <span id="status" class="font-medium">-</span></p>
-                <p>Current Category: <span id="currentCategory" class="font-medium">-</span></p>
-                <p>Items Found: <span id="itemsFound" class="font-medium">0</span></p>
-                <p id="errorMessage" class="text-red-500 hidden"></p>
+
+        <!-- Results Section -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <!-- Statistics -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold mb-4">Statistics</h2>
+                <canvas id="categoryChart"></canvas>
+            </div>
+
+            <!-- Recent Items -->
+            <div class="md:col-span-2 bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold mb-4">Recent Items</h2>
+                <div id="recentItems" class="space-y-4">
+                    <!-- Populated by JavaScript -->
+                </div>
             </div>
         </div>
     </div>
 
     <script>
-        function startScraping() {
+        // Category mappings
+        const subcategories = {
+            'Rings': ['Engagement', 'Wedding', 'Fashion'],
+            'Necklaces': ['Pendants', 'Chains', 'Chokers'],
+            'Bracelets': ['Tennis', 'Bangles', 'Charm'],
+            'Earrings': ['Studs', 'Hoops', 'Drops']
+        };
+
+        // Update subcategories when category changes
+        document.getElementById('category').addEventListener('change', function () {
+            const category = this.value;
+            const subcategorySelect = document.getElementById('subcategory');
+
+            subcategorySelect.innerHTML = subcategories[category]
+                .map(sub => `<option value="${sub}">${sub}</option>`)
+                .join('');
+        });
+
+        // Initialize subcategories
+        document.getElementById('category').dispatchEvent(new Event('change'));
+
+        // Initialize chart
+        const ctx = document.getElementById('categoryChart').getContext('2d');
+        const categoryChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Items per Category',
+                    data: [],
+                    backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                    borderColor: 'rgb(59, 130, 246)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        // Start scraping
+        document.getElementById('startButton').addEventListener('click', async function () {
+            this.disabled = true;
+            document.getElementById('progress').classList.remove('hidden');
+            document.getElementById('errorMessage').classList.add('hidden');
+
+            const maxItems = parseInt(document.getElementById('maxItems').value, 10);
             const category = document.getElementById('category').value;
             const subcategory = document.getElementById('subcategory').value;
-            
-            document.getElementById('progress').classList.remove('hidden');
-            
-            fetch('/start_scraping', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ category, subcategory })
-            });
-            
-            // Start progress polling
-            pollProgress();
-        }
-        
-        function pollProgress() {
-            setInterval(() => {
-                fetch('/progress')
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('status').textContent = data.status;
-                    document.getElementById('currentCategory').textContent = data.current_category || '-';
-                    document.getElementById('itemsFound').textContent = data.items_found;
-                    
-                    const errorElem = document.getElementById('errorMessage');
-                    if (data.error) {
-                        errorElem.textContent = `Error: ${data.error}`;
-                        errorElem.classList.remove('hidden');
-                    } else {
-                        errorElem.classList.add('hidden');
-                    }
+
+            const data = {
+                category: category,
+                subcategory: subcategory,
+                max_items: maxItems
+            };
+
+            try {
+                const response = await fetch('/start_scraping', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
                 });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || 'Failed to start scraping');
+                }
+
+                pollProgress(maxItems);
+
+            } catch (error) {
+                showError(error.message);
+                this.disabled = false;
+            }
+        });
+
+        // Poll progress
+        function pollProgress(maxItems) {
+            const intervalId = setInterval(async () => {
+                try {
+                    const response = await fetch('/progress');
+                    const data = await response.json();
+
+                    updateProgress(data, maxItems);
+
+                    if (data.status === 'completed' || data.status === 'error') {
+                        clearInterval(intervalId);
+                        document.getElementById('startButton').disabled = false;
+                        if (data.status === 'completed') {
+                            updateStats();
+                        }
+                    }
+
+                } catch (error) {
+                    console.error('Error polling progress:', error);
+                }
             }, 1000);
         }
+
+        // Update progress display
+        function updateProgress(data, maxItems) {
+            document.getElementById('status').textContent = capitalizeFirstLetter(data.status);
+            document.getElementById('currentCategory').textContent = data.current_category || '-';
+            document.getElementById('itemsFound').textContent = data.items_found;
+
+            const progressPercent = Math.min(
+                (data.items_found / maxItems) * 100,
+                100
+            );
+            document.querySelector('#progressBar').style.width = `${progressPercent}%`;
+
+            if (data.error) {
+                showError(data.error);
+            }
+        }
+
+        // Capitalize first letter
+        function capitalizeFirstLetter(string) {
+            return string.charAt(0).toUpperCase() + string.slice(1);
+        }
+
+        // Show error message
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.classList.remove('hidden');
+        }
+
+        // Update statistics
+        async function updateStats() {
+            try {
+                const response = await fetch('/stats');
+                const data = await response.json();
+
+                // Prepare data for chart
+                const labels = [];
+                const counts = [];
+
+                for (const [category, subcats] of Object.entries(data)) {
+                    for (const [subcategory, count] of Object.entries(subcats)) {
+                        labels.push(`${category} - ${subcategory}`);
+                        counts.push(count);
+                    }
+                }
+
+                // Update chart
+                categoryChart.data.labels = labels;
+                categoryChart.data.datasets[0].data = counts;
+                categoryChart.update();
+
+                // Update recent items
+                await updateRecentItems();
+
+            } catch (error) {
+                console.error('Error updating stats:', error);
+            }
+        }
+
+        // Update recent items display
+        async function updateRecentItems() {
+            try {
+                const response = await fetch('/recent_items');
+                const items = await response.json();
+
+                const container = document.getElementById('recentItems');
+                container.innerHTML = items.map(item => `
+                    <div class="border-b pb-4">
+                        <div class="flex items-center">
+                            ${item.image_path ? `
+                            <img src="${item.image_path}" alt="${item.title}"
+                                 class="w-20 h-20 object-cover rounded-lg">
+                            ` : `
+                            <div class="w-20 h-20 bg-gray-300 rounded-lg flex items-center justify-center">
+                                <span class="text-gray-600 text-sm">No Image</span>
+                            </div>
+                            `}
+                            <div class="ml-4 flex-1">
+                                <h3 class="font-medium text-gray-800">${item.title}</h3>
+                                <p class="text-gray-600">Price: $${item.price}</p>
+                                <div class="flex space-x-4 mt-2">
+                                    <span class="text-sm text-gray-500">Condition: ${item.condition || 'N/A'}</span>
+                                    <span class="text-sm text-gray-500">Shipping: ${item.shipping || 'N/A'}</span>
+                                </div>
+                                <a href="${item.url}" target="_blank"
+                                   class="text-blue-500 hover:text-blue-600 text-sm mt-2 inline-block">
+                                    View on eBay
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+
+            } catch (error) {
+                console.error('Error updating recent items:', error);
+            }
+        }
+
+        // Initial load
+        document.addEventListener('DOMContentLoaded', () => {
+            updateStats();
+        });
     </script>
 </body>
+
 </html>
